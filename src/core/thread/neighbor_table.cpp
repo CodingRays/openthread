@@ -46,9 +46,9 @@ NeighborTable::NeighborTable(Instance &aInstance)
 {
 }
 
-Neighbor *NeighborTable::FindParent(const Neighbor::AddressMatcher &aMatcher)
+Parent *NeighborTable::FindParent(const Neighbor::AddressMatcher &aMatcher)
 {
-    Neighbor *neighbor = nullptr;
+    Parent *neighbor = nullptr;
     Mle::Mle &mle      = Get<Mle::Mle>();
 
     if (mle.GetParent().Matches(aMatcher))
@@ -63,17 +63,17 @@ Neighbor *NeighborTable::FindParent(const Neighbor::AddressMatcher &aMatcher)
     return neighbor;
 }
 
-Neighbor *NeighborTable::FindParent(Mac::ShortAddress aShortAddress, Neighbor::StateFilter aFilter)
+Parent *NeighborTable::FindParent(Mac::ShortAddress aShortAddress, Neighbor::StateFilter aFilter)
 {
     return FindParent(Neighbor::AddressMatcher(aShortAddress, aFilter));
 }
 
-Neighbor *NeighborTable::FindParent(const Mac::ExtAddress &aExtAddress, Neighbor::StateFilter aFilter)
+Parent *NeighborTable::FindParent(const Mac::ExtAddress &aExtAddress, Neighbor::StateFilter aFilter)
 {
     return FindParent(Neighbor::AddressMatcher(aExtAddress, aFilter));
 }
 
-Neighbor *NeighborTable::FindParent(const Mac::Address &aMacAddress, Neighbor::StateFilter aFilter)
+Parent *NeighborTable::FindParent(const Mac::Address &aMacAddress, Neighbor::StateFilter aFilter)
 {
     return FindParent(Neighbor::AddressMatcher(aMacAddress, aFilter));
 }
@@ -86,6 +86,13 @@ Neighbor *NeighborTable::FindNeighbor(const Neighbor::AddressMatcher &aMatcher)
     if (Get<Mle::Mle>().IsRouterOrLeader())
     {
         neighbor = FindChildOrRouter(aMatcher);
+    }
+
+    if (neighbor == nullptr)
+#elif OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (Get<Mle::Mle>().IsChild())
+    {
+    neighbor = Get<ChildTable>().FindChild(aMatcher);
     }
 
     if (neighbor == nullptr)
@@ -117,6 +124,35 @@ Neighbor *NeighborTable::FindNeighbor(const Mac::Address &aMacAddress, Neighbor:
 {
     return FindNeighbor(Neighbor::AddressMatcher(aMacAddress, aFilter));
 }
+
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
+IndirectReachable *NeighborTable::FindIndirectReachable(const Mac::Address &aMacAddress, Neighbor::StateFilter aFilter)
+{
+    const Neighbor::AddressMatcher matcher = Neighbor::AddressMatcher(aMacAddress, aFilter);
+    IndirectReachable             *neighbor = Get<ChildTable>().FindChild(matcher);
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    VerifyOrExit(neighbor == nullptr);
+
+    if (matcher.Matches(Get<Mle::Mle>().GetParent()))
+    {
+        neighbor = &Get<Mle::Mle>().GetParent();
+        ExitNow();
+    }
+
+    if (matcher.Matches(Get<Mle::Mle>().GetParentCandidate()))
+    {
+        neighbor = &Get<Mle::Mle>().GetParentCandidate();
+        ExitNow();
+    }
+#endif
+
+    // Avoid unused label warning
+    ExitNow();
+exit:
+    return neighbor;
+}
+#endif // OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 #if OPENTHREAD_FTD
 

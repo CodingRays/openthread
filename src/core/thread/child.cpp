@@ -42,7 +42,7 @@
 
 namespace ot {
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 void Child::Info::SetFrom(const Child &aChild)
 {
@@ -75,6 +75,27 @@ void Child::Info::SetFrom(const Child &aChild)
 #endif
 }
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+void Child::SubChildInfo::SetFrom(const Child &aChild)
+{
+    Clear();
+    mExtAddress       = aChild.GetExtAddress();
+    mTimeout          = aChild.GetTimeout();
+    mAge              = Time::MsecToSec(TimerMilli::GetNow() - aChild.GetLastHeard());
+    mRloc16           = aChild.GetRloc16();
+    mPrefixLength     = aChild.GetRlocPrefixLength();
+    mLinkQualityIn    = aChild.GetLinkQualityIn();
+    mAverageRssi      = aChild.GetLinkInfo().GetAverageRss();
+    mLastRssi         = aChild.GetLinkInfo().GetLastRss();
+    mFrameErrorRate   = aChild.GetLinkInfo().GetFrameErrorRate();
+    mMessageErrorRate = aChild.GetLinkInfo().GetMessageErrorRate();
+    mQueuedMessageCnt = aChild.GetIndirectMessageCount();
+    mRxOnWhenIdle     = aChild.IsRxOnWhenIdle();
+    mVersion          = ClampToUint8(aChild.GetVersion());
+}
+#endif
+
+#if OPENTHREAD_FTD
 const Ip6::Address *Child::AddressIterator::GetAddress(void) const
 {
     // `mIndex` value of zero indicates mesh-local IPv6 address.
@@ -107,6 +128,7 @@ void Child::AddressIterator::Update(void)
 exit:
     return;
 }
+#endif // OPENTHREAD_FTD
 
 void Child::Clear(void)
 {
@@ -116,6 +138,7 @@ void Child::Clear(void)
     Init(instance);
 }
 
+#if OPENTHREAD_FTD
 void Child::ClearIp6Addresses(void)
 {
     mMeshLocalIid.Clear();
@@ -125,6 +148,7 @@ void Child::ClearIp6Addresses(void)
     mMlrRegisteredMask.Clear();
 #endif
 }
+#endif
 
 void Child::SetDeviceMode(Mle::DeviceMode aMode)
 {
@@ -139,6 +163,7 @@ exit:
     return;
 }
 
+#if OPENTHREAD_FTD
 Error Child::GetMeshLocalIp6Address(Ip6::Address &aAddress) const
 {
     Error error = kErrorNone;
@@ -249,6 +274,7 @@ bool Child::HasIp6Address(const Ip6::Address &aAddress) const
 exit:
     return retval;
 }
+#endif // OPENTHREAD_FTD
 
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE
 const Ip6::Address *Child::GetDomainUnicastAddress(void) const
@@ -270,7 +296,8 @@ exit:
 }
 #endif
 
-#if OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE
+
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE
 bool Child::HasMlrRegisteredAddress(const Ip6::Address &aAddress) const
 {
     bool has = false;
@@ -313,8 +340,41 @@ void Child::SetAddressMlrState(const Ip6::Address &aAddress, MlrState aState)
     mMlrToRegisterMask.Set(addressIndex, aState == kMlrStateToRegister);
     mMlrRegisteredMask.Set(addressIndex, aState == kMlrStateRegistered);
 }
-#endif // OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE
+#endif // OPENTHREAD_FTD && OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE
 
-#endif // OPENTHREAD_FTD
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+Child *Child::GetSubChildParent(void)
+{
+    Child *parent = nullptr;
 
+    VerifyOrExit(!IsDirectChild());
+
+    parent = Get<ChildTable>().GetChildAtIndex(mSubChildParent);
+
+exit:
+    return parent;
+}
+
+void Child::SetSubChildParent(Child &aParent)
+{
+    OT_ASSERT(Get<ChildTable>().GetNeighborIndex(aParent, mSubChildParent) == kErrorNone);
+    mHasSubChildParent = true;
+}
+
+Child &Child::GetNextHop(void)
+{
+    Child *nextHop = this;
+
+    while (nextHop->mHasSubChildParent)
+    {
+        nextHop = Get<ChildTable>().GetChildAtIndex(nextHop->mSubChildParent);
+        OT_ASSERT(nextHop != nullptr);
+    }
+
+    return *nextHop;
+}
+#endif
+
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
+       
 } // namespace ot

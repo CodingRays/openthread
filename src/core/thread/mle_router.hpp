@@ -644,6 +644,9 @@ private:
     Error HandleAdvertisement(RxInfo &aRxInfo, uint16_t aSourceAddress, const LeaderData &aLeaderData);
     void  HandleParentRequest(RxInfo &aRxInfo);
     void  HandleChildIdRequest(RxInfo &aRxInfo);
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    Error HandleSubChildIdRequest(RxInfo &aRxInfo, Mac::ExtAddress &aExtAddr, uint16_t aParentRloc);
+#endif
     void  HandleChildUpdateRequest(RxInfo &aRxInfo);
     void  HandleChildUpdateResponse(RxInfo &aRxInfo);
     void  HandleDataRequest(RxInfo &aRxInfo);
@@ -691,6 +694,10 @@ private:
     Error UpdateChildAddresses(const Message &aMessage, uint16_t aOffset, uint16_t aLength, Child &aChild);
     bool  HasNeighborWithGoodLinkQuality(void) const;
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    void SendChildDetachResponse(Child &aSubChildParent, const Mac::ExtAddress &aSubChild);
+#endif
+
     static void HandleAddressSolicitResponse(void                *aContext,
                                              otMessage           *aMessage,
                                              const otMessageInfo *aMessageInfo,
@@ -706,6 +713,8 @@ private:
     void RemoveChildren(void);
     bool ShouldDowngrade(uint8_t aNeighborId, const RouteTlv &aRouteTlv) const;
     bool NeighborHasComparableConnectivity(const RouteTlv &aRouteTlv, uint8_t aNeighborId) const;
+
+    Error GenerateChildRloc(Child &aChild);
 
     static void HandleAdvertiseTrickleTimer(TrickleTimer &aTimer);
     void        HandleAdvertiseTrickleTimer(void);
@@ -768,7 +777,7 @@ DeclareTmfHandler(MleRouter, kUriAddressRelease);
 
 #endif // OPENTHREAD_FTD
 
-#if OPENTHREAD_MTD
+#if OPENTHREAD_MTD && !OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
 
 typedef Mle MleRouter;
 

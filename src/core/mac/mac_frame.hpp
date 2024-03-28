@@ -1780,6 +1780,33 @@ private:
     uint16_t mPeriod;
 } OT_TOOL_PACKED_END;
 
+OT_TOOL_PACKED_BEGIN
+class RendezvousIe
+{
+public:
+    static constexpr uint8_t kHeaderIeId = 0x1d;
+    static constexpr uint8_t kIeContentSize = sizeof(uint16_t);
+
+    /**
+     * Returns the Rendezvous Time.
+     *
+     * @returns the Rendezvous Time.
+     *
+     */
+     uint16_t GetRendezvousTime(void) const { return LittleEndian::HostSwap16(mRendezvousTime); }
+
+     /**
+      * Sets the Rendezvous Time.
+      *
+      * @param[in]  aRendezvousTime  The RendezvousTime.
+      *
+      */
+      void SetRendezvousTime(uint16_t aRendezvousTime) { mRendezvousTime = LittleEndian::HostSwap16(aRendezvousTime); }
+
+private:
+    uint16_t mRendezvousTime;
+} OT_TOOL_PACKED_END;
+
 /**
  * Implements Termination2 IE.
  *

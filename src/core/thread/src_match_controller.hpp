@@ -36,7 +36,7 @@
 
 #include "openthread-core-config.h"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/error.hpp"
 #include "common/locator.hpp"
@@ -44,7 +44,7 @@
 
 namespace ot {
 
-class Child;
+class IndirectReachable;
 
 /**
  * @addtogroup core-source-match-controller
@@ -93,7 +93,7 @@ public:
      * @param[in] aChild    A reference to the child.
      *
      */
-    void IncrementMessageCount(Child &aChild);
+    void IncrementMessageCount(IndirectReachable &aChild);
 
     /**
      * Decrements the message count for a child and updates the source match table.
@@ -101,7 +101,7 @@ public:
      * @param[in] aChild    A reference to the child.
      *
      */
-    void DecrementMessageCount(Child &aChild);
+    void DecrementMessageCount(IndirectReachable &aChild);
 
     /**
      * Resets the message count for a child to zero and updates the source match table.
@@ -109,7 +109,7 @@ public:
      * @param[in] aChild    A reference to the child.
      *
      */
-    void ResetMessageCount(Child &aChild);
+    void ResetMessageCount(IndirectReachable &aChild);
 
     /**
      * Sets whether or not to perform source address matching on the extended or short address for
@@ -119,7 +119,7 @@ public:
      * @param[in] aUseShortAddress  `true` to match on short source address, `false` otherwise.
      *
      */
-    void SetSrcMatchAsShort(Child &aChild, bool aUseShortAddress);
+    void SetSrcMatchAsShort(IndirectReachable &aChild, bool aUseShortAddress);
 
 private:
     /**
@@ -151,7 +151,7 @@ private:
      * @param[in] aChild    A reference to the child.
      *
      */
-    void AddEntry(Child &aChild);
+    void AddEntry(IndirectReachable &aChild);
 
     /**
      * Clears an entry in source match table for a given child and updates the state of source matching
@@ -163,7 +163,7 @@ private:
      * @param[in] aChild    A reference to the child.
      *
      */
-    void ClearEntry(Child &aChild);
+    void ClearEntry(IndirectReachable &aChild);
 
     /**
      * Adds a given child's address (short or extended address depending on child's setting) to the source
@@ -175,7 +175,7 @@ private:
      * @retval kErrorNoBufs   No available space in the source match table.
      *
      */
-    Error AddAddress(const Child &aChild);
+    Error AddAddress(const IndirectReachable &aChild);
 
     /**
      * Adds all pending entries to the source match table.
@@ -196,6 +196,6 @@ private:
 
 } // namespace ot
 
-#endif // OPENTHREAD_FTD
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #endif // SOURCE_MATCH_CONTROLLER_HPP_

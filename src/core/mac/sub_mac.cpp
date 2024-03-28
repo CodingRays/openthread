@@ -58,14 +58,10 @@ SubMac::SubMac(Instance &aInstance)
     , mTransmitFrame(Get<Radio>().GetTransmitBuffer())
     , mCallbacks(aInstance)
     , mTimer(aInstance)
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     , mCslTimer(aInstance, SubMac::HandleCslTimer)
 #endif
 {
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    mCslParentAccuracy.Init();
-#endif
-
     Init();
 }
 
@@ -95,13 +91,12 @@ void SubMac::Init(void)
     mKeyId        = 0;
     mTimer.Stop();
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     mCslPeriod     = 0;
     mCslChannel    = 0;
     mCslPeerShort  = 0;
     mIsCslSampling = false;
     mCslSampleTime = TimeMicro{0};
-    mCslLastSync   = TimeMicro{0};
     mCslTimer.Stop();
 #endif
 }
@@ -214,7 +209,7 @@ Error SubMac::Disable(void)
 {
     Error error;
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     mCslTimer.Stop();
 #endif
 
@@ -275,7 +270,7 @@ exit:
     return error;
 }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 void SubMac::CslSample(void)
 {
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE
@@ -297,7 +292,7 @@ void SubMac::CslSample(void)
 exit:
     return;
 }
-#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#endif // (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
 void SubMac::LogReceived(RxFrame *aFrame)
@@ -366,7 +361,7 @@ void SubMac::HandleReceiveDone(RxFrame *aFrame, Error aError)
         SignalFrameCounterUsed(aFrame->mInfo.mRxInfo.mAckFrameCounter, aFrame->mInfo.mRxInfo.mAckKeyId);
     }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     if (aFrame != nullptr && aError == kErrorNone)
     {
 #if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
@@ -375,14 +370,36 @@ void SubMac::HandleReceiveDone(RxFrame *aFrame, Error aError)
         // Assuming the risk of the parent missing the Enh-ACK in favor of smaller CSL receive window
         if ((mCslPeriod > 0) && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck)
         {
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
-            mCslLastSync = TimerMicro::GetNow();
+            CslInfo *neighbor{ nullptr };
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+            Address address;
+
+            if (aFrame->GetSrcAddr(address) == OT_ERROR_NONE)
+            {
+                neighbor = Get<NeighborTable>().FindParent(address, Neighbor::kInStateValid);
+                if (neighbor == nullptr)
+                {
+                    neighbor = Get<ChildTable>().FindChild(address, Neighbor::kInStateValid);
+                }
+            }
 #else
-            mCslLastSync = TimeMicro(static_cast<uint32_t>(aFrame->mInfo.mRxInfo.mTimestamp));
+            if (Get<Mle::Mle>().GetParent().IsStateValid())
+            {
+                neighbor = &Get<Mle::Mle>().GetParent();
+            }
 #endif
+            if (neighbor != nullptr)
+            {
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
+                neighbor->SetCslLastSync(TimerMicro::GetNow());
+#else
+                neighbor->SetCslLastSync(TimeMicro(static_cast<uint32_t>(aFrame->mInfo.mRxInfo.mTimestamp)));
+#endif
+            }
         }
     }
-#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#endif // (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE
     if (!mRadioFilterEnabled)
@@ -409,7 +426,7 @@ Error SubMac::Send(void)
 #endif
     case kStateSleep:
     case kStateReceive:
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     case kStateCslSample:
 #endif
         break;
@@ -637,16 +654,38 @@ void SubMac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aErro
         {
             mCallbacks.RecordCcaStatus(ccaSuccess, aFrame.GetChannel());
         }
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         // Actual synchronization timestamp should be from the sent frame instead of the current time.
         // Assuming the error here since it is bounded and has very small effect on the final window duration.
         if (aAckFrame != nullptr && aFrame.GetHeaderIe(CslIe::kHeaderIeId) != nullptr)
         {
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
-            mCslLastSync = TimerMicro::GetNow();
+            CslInfo *neighbor{ nullptr };
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+            Address address;
+
+            if (aFrame.GetDstAddr(address) == OT_ERROR_NONE)
+            {
+                neighbor = Get<NeighborTable>().FindParent(address, Neighbor::kInStateValid);
+                if (neighbor == nullptr)
+                {
+                    neighbor = Get<ChildTable>().FindChild(address, Neighbor::kInStateValid);
+                }
+            }
 #else
-            mCslLastSync = TimeMicro(static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance())));
+            if (Get<Mle::Mle>().GetParent().IsStateValid())
+            {
+                neighbor = &Get<Mle::Mle>().GetParent();
+            }
 #endif
+            if (neighbor != nullptr)
+            {
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
+                neighbor->SetCslLastSync(TimerMicro::GetNow());
+#else
+                neighbor->SetCslLastSync(TimeMicro(otPlatRadioGetNow(&GetInstance())));
+#endif
+            }
         }
 #endif
         break;
@@ -792,7 +831,7 @@ Error SubMac::EnergyScan(uint8_t aScanChannel, uint16_t aScanDuration)
 
     case kStateReceive:
     case kStateSleep:
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     case kStateCslSample:
 #endif
         break;
@@ -1103,7 +1142,7 @@ const char *SubMac::StateToString(State aState)
 #if !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
         "CslTransmit", // (7) kStateCslTransmit
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         "CslSample", // (8) kStateCslSample
 #endif
     };
@@ -1119,19 +1158,19 @@ const char *SubMac::StateToString(State aState)
     static_assert(kStateDelayBeforeRetx == 6, "kStateDelayBeforeRetx value is not correct");
 #if !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     static_assert(kStateCslTransmit == 7, "kStateCslTransmit value is not correct");
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 8, "kStateCslSample value is not correct");
 #endif
-#elif OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#elif (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 7, "kStateCslSample value is not correct");
 #endif
 
 #elif !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     static_assert(kStateCslTransmit == 6, "kStateCslTransmit value is not correct");
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 7, "kStateCslSample value is not correct");
 #endif
-#elif OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#elif (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 6, "kStateCslSample value is not correct");
 #endif
 
@@ -1143,7 +1182,7 @@ const char *SubMac::StateToString(State aState)
 //---------------------------------------------------------------------------------------------------------------------
 // CSL Receiver methods
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 bool SubMac::UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
 {
     bool diffPeriod  = aPeriod != mCslPeriod;
@@ -1157,7 +1196,16 @@ bool SubMac::UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShort
     VerifyOrExit(diffPeriod || diffPeer);
     mCslPeriod    = aPeriod;
     mCslPeerShort = aShortAddr;
-    IgnoreError(Get<Radio>().EnableCsl(aPeriod, aShortAddr, aExtAddr));
+    IgnoreError(Get<Radio>().EnableCsl(aPeriod));
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    UpdateCslNeighbors();
+    OT_UNUSED_VARIABLE(aShortAddr);
+    OT_UNUSED_VARIABLE(aExtAddr);
+#else
+    IgnoreError(Get<Radio>().AddCslShortEntry(aShortAddr));
+    IgnoreError(Get<Radio>().AddCslExtEntry(*static_cast<const ExtAddress*>(aExtAddr)));
+#endif
 
     mCslTimer.Stop();
     if (mCslPeriod > 0)
@@ -1170,6 +1218,34 @@ bool SubMac::UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShort
 exit:
     return retval;
 }
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+void SubMac::UpdateCslNeighbors(void)
+{
+    LogCrit("Update");
+    IgnoreError(Get<Radio>().ClearCslShortEntries());
+    IgnoreError(Get<Radio>().ClearCslExtEntries());
+
+    if (Get<Mle::Mle>().GetParent().IsStateValid())
+    {
+        IgnoreError(Get<Radio>().AddCslShortEntry(Get<Mle::Mle>().GetParent().GetRloc16()));
+        IgnoreError(Get<Radio>().AddCslExtEntry(Get<Mle::Mle>().GetParent().GetExtAddress()));
+    }
+    if (Get<Mle::Mle>().GetParentCandidate().IsStateValid())
+    {
+        IgnoreError(Get<Radio>().AddCslShortEntry(Get<Mle::Mle>().GetParent().GetRloc16()));
+        IgnoreError(Get<Radio>().AddCslExtEntry(Get<Mle::Mle>().GetParent().GetExtAddress()));
+    }
+    for (Child &child : Get<ChildTable>().Iterate(Child::kInStateWithSecurityReady))
+    {
+        if (child.GetRloc16() != Mle::kInvalidRloc16)
+        {
+            IgnoreError(Get<Radio>().AddCslShortEntry(child.GetRloc16()));
+        }
+        IgnoreError(Get<Radio>().AddCslExtEntry(child.GetExtAddress()));
+    }
+}
+#endif
 
 void SubMac::HandleCslTimer(Timer &aTimer) { aTimer.Get<SubMac>().HandleCslTimer(); }
 
@@ -1265,7 +1341,7 @@ void SubMac::HandleCslTimer(void)
 void SubMac::GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter)
 {
     uint32_t semiPeriod = mCslPeriod * kUsPerTenSymbols / 2;
-    uint32_t curTime, elapsed, semiWindow;
+    uint32_t curTime, semiWindow{ 0 };
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
     curTime = TimerMicro::GetNow().GetValue();
@@ -1273,17 +1349,49 @@ void SubMac::GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter)
     curTime = static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance()));
 #endif
 
-    elapsed = curTime - mCslLastSync.GetValue();
+    if (Get<Mle::Mle>().GetParent().IsStateValid())
+    {
+        semiWindow = GetCslNeighborSemiWindow(Get<Mle::Mle>().GetParent(), curTime);
+    }
 
-    semiWindow =
-        static_cast<uint32_t>(static_cast<uint64_t>(elapsed) *
-                              (Get<Radio>().GetCslAccuracy() + mCslParentAccuracy.GetClockAccuracy()) / 1000000);
-    semiWindow += mCslParentAccuracy.GetUncertaintyInMicrosec() + Get<Radio>().GetCslUncertainty() * 10;
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (Get<Mle::Mle>().GetParentCandidate().IsStateValid())
+    {
+        // There is a bug where the child update response gets missed. We add 5ms to address that as a temporary fix
+        uint32_t newSemiWindow = GetCslNeighborSemiWindow(Get<Mle::Mle>().GetParentCandidate(), curTime) + 5000;
+        if (newSemiWindow > semiWindow)
+        {
+            semiWindow = newSemiWindow;
+        }
+    }
+
+    for (Child &child : Get<ChildTable>().Iterate(Child::kInStateValid))
+    {
+        uint32_t childSemiWindow = GetCslNeighborSemiWindow(child, curTime);
+        if (childSemiWindow > semiWindow)
+        {
+            semiWindow = childSemiWindow;
+        }
+    }
+#endif
 
     aAhead = Min(semiPeriod, semiWindow + kMinReceiveOnAhead + kCslReceiveTimeAhead);
     aAfter = Min(semiPeriod, semiWindow + kMinReceiveOnAfter);
 }
-#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+uint32_t SubMac::GetCslNeighborSemiWindow(CslInfo &aNeighbor, uint32_t aTime)
+{
+    uint32_t semiWindow;
+    uint32_t elapsed = aTime - aNeighbor.GetCslLastSync().GetValue();
+
+    semiWindow =
+        static_cast<uint32_t>(static_cast<uint64_t>(elapsed) *
+                              (Get<Radio>().GetCslAccuracy() + aNeighbor.GetCslAccuracy().GetClockAccuracy()) / 1000000);
+    semiWindow += aNeighbor.GetCslAccuracy().GetUncertaintyInMicrosec() + Get<Radio>().GetCslUncertainty() * 10;
+
+    return semiWindow;
+}
+#endif // (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 } // namespace Mac
 } // namespace ot

@@ -103,6 +103,9 @@ Error DataPollSender::SendDataPoll(void)
 
     VerifyOrExit(mEnabled, error = kErrorInvalidState);
     VerifyOrExit(!Get<Mac::Mac>().GetRxOnWhenIdle(), error = kErrorInvalidState);
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    VerifyOrExit(!Get<Mle::MleSubChild>().IsNonDirectChild(), error = kErrorInvalidState);
+#endif
 
     VerifyOrExit(GetParent().IsStateValidOrRestoring(), error = kErrorInvalidState);
 
@@ -321,11 +324,23 @@ exit:
 
 void DataPollSender::ProcessRxFrame(const Mac::RxFrame &aFrame)
 {
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    Mac::Address             address;
+    Neighbor::AddressMatcher matcher = Neighbor::AddressMatcher(Neighbor::kInStateValid);
+#endif
+
     VerifyOrExit(mEnabled);
 
     mPollTimeoutCounter = 0;
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    SuccessOrExit(aFrame.GetSrcAddr(address));
+    matcher = Neighbor::AddressMatcher(address, Neighbor::kInStateValidOrRestoring);
+
+    if (aFrame.GetFramePending() && Get<Mle::Mle>().GetParent().Matches(matcher) && !Get<Mle::Mle>().GetParent().IsSubChild())
+#else
     if (aFrame.GetFramePending())
+#endif
     {
         IgnoreError(SendDataPoll());
     }
@@ -346,8 +361,19 @@ void DataPollSender::ProcessTxDone(const Mac::TxFrame &aFrame, const Mac::RxFram
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     if (aFrame.mInfo.mTxInfo.mIsARetx && (aFrame.GetHeaderIe(Mac::CslIe::kHeaderIeId) != nullptr))
     {
-        // For retransmission frame, use a data poll to resync its parent with correct CSL phase
-        sendDataPoll = true;
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        Mac::Address dstAddr;
+        Parent *parent = nullptr;
+
+        IgnoreError(aFrame.GetDstAddr(dstAddr));
+        parent = Get<NeighborTable>().FindParent(dstAddr);
+    
+        if (parent != nullptr && !parent->IsSubChild())
+#endif
+        {
+            // For retransmission frame, use a data poll to resync its parent with correct CSL phase
+            sendDataPoll = true;
+        }
     }
 #endif
 

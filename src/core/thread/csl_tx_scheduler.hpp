@@ -31,7 +31,7 @@
 
 #include "openthread-core-config.h"
 
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/locator.hpp"
 #include "common/message.hpp"
@@ -100,6 +100,12 @@ public:
         uint64_t GetLastRxTimestamp(void) const { return mLastRxTimestamp; }
         void     SetLastRxTimestamp(uint64_t aLastRxTimestamp) { mLastRxTimestamp = aLastRxTimestamp; }
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        uint8_t GetResyncAttempts(void) const { return mResyncAttempts; }
+        void    IncrementResyncAttempts(void) { mResyncAttempts += 1; }
+        void    ResetResyncAttempts(void) { mResyncAttempts = 0; }
+#endif
+
     private:
         uint8_t  mCslTxAttempts : 7;   ///< Number of CSL triggered tx attempts.
         bool     mCslSynchronized : 1; ///< Indicates whether or not the child is CSL synchronized.
@@ -154,6 +160,10 @@ public:
         TimeMilli mCslLastHeard; ///< Radio clock time when last frame containing CSL IE was heard.
         uint64_t
             mLastRxTimestamp; ///< Radio clock time when last frame containing CSL IE was received, in microseconds.
+                                       
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        uint8_t mResyncAttempts;
+#endif
 
         static_assert(kMaxCslTriggeredTxAttempts < (1 << 7), "mCslTxAttempts cannot fit max!");
     };
@@ -182,16 +192,16 @@ public:
          *
          * @param[out] aFrame    A reference to a MAC frame where the new frame would be placed.
          * @param[out] aContext  A reference to a `FrameContext` where the context for the new frame would be placed.
-         * @param[in]  aChild    The child for which to prepare the frame.
+         * @param[in]  aNeighbor The neighbor for which to prepare the frame.
          *
          * @retval kErrorNone   Frame was prepared successfully.
          * @retval kErrorAbort  CSL transmission should be aborted (no frame for the child).
          *
          */
-        Error PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, Child &aChild);
+        Error PrepareFrameForNeighbor(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectReachable &aNeighbor);
 
         /**
-         * This callback method notifies the end of CSL frame transmission to a child.
+         * This callback method notifies the end of CSL frame transmission to a neighbor.
          *
          * @param[in]  aFrame     The transmitted frame.
          * @param[in]  aContext   The context associated with the frame when it was prepared.
@@ -199,14 +209,15 @@ public:
          *                        kErrorNoAck when the frame was transmitted but no ACK was received,
          *                        kErrorChannelAccessFailure tx failed due to activity on the channel,
          *                        kErrorAbort when transmission was aborted for other reasons.
-         * @param[in]  aChild     The child to which the frame was transmitted.
+         * @param[in]  aNeighbor  The neighbor to which the frame was transmitted.
          *
          */
-        void HandleSentFrameToChild(const Mac::TxFrame &aFrame,
+        void HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
                                     const FrameContext &aContext,
                                     Error               aError,
-                                    Child              &aChild);
+                                    IndirectReachable  &aNeighbor);
     };
+
     /**
      * Initializes the CSL tx scheduler object.
      *
@@ -231,23 +242,25 @@ public:
      */
     void Clear(void);
 
+    uint32_t GetNextCslTransmissionDelay(const IndirectReachable &aNeighbor, uint32_t &aDelayFromLastRx, uint32_t aAheadUs) const;
+
 private:
     // Guard time in usec to add when checking delay while preparing the CSL frame for tx.
     static constexpr uint32_t kFramePreparationGuardInterval = 1500;
 
     void InitFrameRequestAhead(void);
     void RescheduleCslTx(void);
-
-    uint32_t GetNextCslTransmissionDelay(const Child &aChild, uint32_t &aDelayFromLastRx, uint32_t aAheadUs) const;
+    // Only updates neighbor and time if new time is less than aDelayTime.
+    void ProcessNeighborCslTxTime(IndirectReachable &aNeighbor, uint32_t &aDelayTime, IndirectReachable *&aNeighborOut) const;
 
     // Callbacks from `Mac`
     Mac::TxFrame *HandleFrameRequest(Mac::TxFrames &aTxFrames);
     void          HandleSentFrame(const Mac::TxFrame &aFrame, Error aError);
 
-    void HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, Child &aChild);
+    void HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, IndirectReachable &aNeighbor);
 
     uint32_t                mCslFrameRequestAheadUs;
-    Child                  *mCslTxChild;
+    IndirectReachable      *mCslTxChild;
     Message                *mCslTxMessage;
     Callbacks::FrameContext mFrameContext;
     Callbacks               mCallbacks;
@@ -260,6 +273,6 @@ private:
 
 } // namespace ot
 
-#endif // OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#endif // (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #endif // CSL_TX_SCHEDULER_HPP_

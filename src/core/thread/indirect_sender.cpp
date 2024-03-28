@@ -33,7 +33,7 @@
 
 #include "indirect_sender.hpp"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/code_utils.hpp"
 #include "common/locator_getters.hpp"
@@ -89,16 +89,13 @@ exit:
     mEnabled = false;
 }
 
-void IndirectSender::AddMessageForSleepyChild(Message &aMessage, Child &aChild)
+void IndirectSender::AddMessageForSleepyChild(Message &aMessage, IndirectReachable &aChild)
 {
-    uint16_t childIndex;
-
     OT_ASSERT(!aChild.IsRxOnWhenIdle());
 
-    childIndex = Get<ChildTable>().GetChildIndex(aChild);
-    VerifyOrExit(!aMessage.GetChildMask(childIndex));
+    VerifyOrExit(!aMessage.IsForNeighbor(aChild));
+    aMessage.SetForNeighbor(aChild);
 
-    aMessage.SetChildMask(childIndex);
     mSourceMatchController.IncrementMessageCount(aChild);
 
     if ((aMessage.GetType() != Message::kTypeSupervision) && (aChild.GetIndirectMessageCount() > 1))
@@ -118,14 +115,13 @@ exit:
     return;
 }
 
-Error IndirectSender::RemoveMessageFromSleepyChild(Message &aMessage, Child &aChild)
+Error IndirectSender::RemoveMessageFromSleepyChild(Message &aMessage, IndirectReachable &aChild)
 {
     Error    error      = kErrorNone;
-    uint16_t childIndex = Get<ChildTable>().GetChildIndex(aChild);
 
-    VerifyOrExit(aMessage.GetChildMask(childIndex), error = kErrorNotFound);
+    VerifyOrExit(aMessage.IsForNeighbor(aChild), error = kErrorNotFound);
+    aMessage.ClearForNeighbor(aChild);
 
-    aMessage.ClearChildMask(childIndex);
     mSourceMatchController.DecrementMessageCount(aChild);
 
     RequestMessageUpdate(aChild);
@@ -134,14 +130,13 @@ exit:
     return error;
 }
 
-void IndirectSender::ClearAllMessagesForSleepyChild(Child &aChild)
+void IndirectSender::ClearAllMessagesForSleepyChild(IndirectReachable &aChild)
 {
     VerifyOrExit(aChild.GetIndirectMessageCount() > 0);
 
     for (Message &message : Get<MeshForwarder>().mSendQueue)
     {
-        message.ClearChildMask(Get<ChildTable>().GetChildIndex(aChild));
-
+        message.ClearForNeighbor(aChild);
         Get<MeshForwarder>().RemoveMessageIfNoPendingTx(message);
     }
 
@@ -157,7 +152,7 @@ exit:
     return;
 }
 
-void IndirectSender::SetChildUseShortAddress(Child &aChild, bool aUseShortAddress)
+void IndirectSender::SetChildUseShortAddress(IndirectReachable &aChild, bool aUseShortAddress)
 {
     VerifyOrExit(aChild.IsIndirectSourceMatchShort() != aUseShortAddress);
 
@@ -167,7 +162,7 @@ exit:
     return;
 }
 
-void IndirectSender::HandleChildModeChange(Child &aChild, Mle::DeviceMode aOldMode)
+void IndirectSender::HandleChildModeChange(IndirectReachable &aChild, Mle::DeviceMode aOldMode)
 {
     if (!aChild.IsRxOnWhenIdle() && (aChild.IsStateValid()))
     {
@@ -179,13 +174,11 @@ void IndirectSender::HandleChildModeChange(Child &aChild, Mle::DeviceMode aOldMo
 
     if (!aOldMode.IsRxOnWhenIdle() && aChild.IsRxOnWhenIdle() && (aChild.GetIndirectMessageCount() > 0))
     {
-        uint16_t childIndex = Get<ChildTable>().GetChildIndex(aChild);
-
         for (Message &message : Get<MeshForwarder>().mSendQueue)
         {
-            if (message.GetChildMask(childIndex))
+            if(message.IsForNeighbor(aChild))
             {
-                message.ClearChildMask(childIndex);
+                message.ClearForNeighbor(aChild);
                 message.SetDirectTransmission();
             }
         }
@@ -207,14 +200,13 @@ void IndirectSender::HandleChildModeChange(Child &aChild, Mle::DeviceMode aOldMo
     // case.
 }
 
-Message *IndirectSender::FindIndirectMessage(Child &aChild, bool aSupervisionTypeOnly)
+Message *IndirectSender::FindIndirectMessage(IndirectReachable &aChild, bool aSupervisionTypeOnly)
 {
     Message *msg        = nullptr;
-    uint16_t childIndex = Get<ChildTable>().GetChildIndex(aChild);
 
     for (Message &message : Get<MeshForwarder>().mSendQueue)
     {
-        if (message.GetChildMask(childIndex) &&
+        if (message.IsForNeighbor(aChild) &&
             (!aSupervisionTypeOnly || (message.GetType() == Message::kTypeSupervision)))
         {
             msg = &message;
@@ -225,7 +217,7 @@ Message *IndirectSender::FindIndirectMessage(Child &aChild, bool aSupervisionTyp
     return msg;
 }
 
-void IndirectSender::RequestMessageUpdate(Child &aChild)
+void IndirectSender::RequestMessageUpdate(IndirectReachable &aChild)
 {
     Message *curMessage = aChild.GetIndirectMessage();
     Message *newMessage;
@@ -235,7 +227,7 @@ void IndirectSender::RequestMessageUpdate(Child &aChild)
     // case where we have a pending "replace frame" request and while
     // waiting for the callback, the current message is removed.
 
-    if ((curMessage != nullptr) && !curMessage->GetChildMask(Get<ChildTable>().GetChildIndex(aChild)))
+    if ((curMessage != nullptr) && !curMessage->IsForNeighbor(aChild))
     {
         // Set the indirect message for this child to `nullptr` to ensure
         // it is not processed on `HandleSentFrameToChild()` callback.
@@ -291,7 +283,7 @@ exit:
     return;
 }
 
-void IndirectSender::HandleFrameChangeDone(Child &aChild)
+void IndirectSender::HandleFrameChangeDone(IndirectReachable &aChild)
 {
     VerifyOrExit(aChild.IsWaitingForMessageUpdate());
     UpdateIndirectMessage(aChild);
@@ -300,7 +292,7 @@ exit:
     return;
 }
 
-void IndirectSender::UpdateIndirectMessage(Child &aChild)
+void IndirectSender::UpdateIndirectMessage(IndirectReachable &aChild)
 {
     Message *message = FindIndirectMessage(aChild);
 
@@ -324,7 +316,7 @@ void IndirectSender::UpdateIndirectMessage(Child &aChild)
     }
 }
 
-Error IndirectSender::PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, Child &aChild)
+Error IndirectSender::PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectReachable &aChild)
 {
     Error    error   = kErrorNone;
     Message *message = aChild.GetIndirectMessage();
@@ -357,7 +349,7 @@ exit:
     return error;
 }
 
-uint16_t IndirectSender::PrepareDataFrame(Mac::TxFrame &aFrame, Child &aChild, Message &aMessage)
+uint16_t IndirectSender::PrepareDataFrame(Mac::TxFrame &aFrame, IndirectReachable &aChild, Message &aMessage)
 {
     Ip6::Header    ip6Header;
     Mac::Addresses macAddrs;
@@ -401,7 +393,7 @@ uint16_t IndirectSender::PrepareDataFrame(Mac::TxFrame &aFrame, Child &aChild, M
     return nextOffset;
 }
 
-void IndirectSender::PrepareEmptyFrame(Mac::TxFrame &aFrame, Child &aChild, bool aAckRequest)
+void IndirectSender::PrepareEmptyFrame(Mac::TxFrame &aFrame, IndirectReachable &aChild, bool aAckRequest)
 {
     Mac::Address macDest;
     aChild.GetMacAddress(macDest);
@@ -411,7 +403,7 @@ void IndirectSender::PrepareEmptyFrame(Mac::TxFrame &aFrame, Child &aChild, bool
 void IndirectSender::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
                                             const FrameContext &aContext,
                                             Error               aError,
-                                            Child              &aChild)
+                                            IndirectReachable   &aChild)
 {
     Message *message    = aChild.GetIndirectMessage();
     uint16_t nextOffset = aContext.mMessageNextOffset;
@@ -479,7 +471,6 @@ void IndirectSender::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
         // The indirect tx of this message to the child is done.
 
         Error        txError    = aError;
-        uint16_t     childIndex = Get<ChildTable>().GetChildIndex(aChild);
         Mac::Address macDest;
 
         aChild.SetIndirectMessage(nullptr);
@@ -530,9 +521,9 @@ void IndirectSender::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
             }
         }
 
-        if (message->GetChildMask(childIndex))
+        if (message->IsForNeighbor(aChild))
         {
-            message->ClearChildMask(childIndex);
+            message->ClearForNeighbor(aChild);
             mSourceMatchController.DecrementMessageCount(aChild);
         }
 
@@ -563,4 +554,4 @@ void IndirectSender::ClearMessagesForRemovedChildren(void)
 
 } // namespace ot
 
-#endif // #if OPENTHREAD_FTD
+#endif // #if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
