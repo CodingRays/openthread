@@ -77,6 +77,8 @@ class HmacSha256;
 
 } // namespace Crypto
 
+class IndirectReachable;
+
 /**
  * @addtogroup core-message
  *
@@ -201,7 +203,7 @@ protected:
         uint8_t      mChannel;     // The message channel (used for MLE Announce).
         RssAverager  mRssAverager; // The averager maintaining the received signal strength (RSS) average.
         LqiAverager  mLqiAverager; // The averager maintaining the Link quality indicator (LQI) average.
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
         ChildMask mChildMask; // ChildMask to indicate which sleepy children need to receive this.
 #endif
 
@@ -228,6 +230,10 @@ protected:
         bool    mTimeSync : 1;      // Whether the message is also used for time sync purpose.
         int64_t mNetworkTimeOffset; // The time offset to the Thread network time, in microseconds.
         uint8_t mTimeSyncSeq;       // The time sync sequence.
+#endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        bool    mToParentCandidate : 1;   // Extension to the child mask for the parent candidate
+        bool    mToParent : 1;            // Extension to the child mask for the parent
 #endif
     };
 
@@ -308,6 +314,12 @@ public:
         kSubTypeMleDataResponse        = 9,  ///< MLE Data Response
         kSubTypeMleChildIdRequest      = 10, ///< MLE Child ID Request
         kSubTypeMleDataRequest         = 11, ///< MLE Data Request
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kSubTypeMleSubChildParentRequest     = 12, ///< MLE SubChild Parent Request
+        kSubTypeMleSubChildParentResponse    = 13, ///< MLE SubChild Parent Response
+        kSubTypeMleSubChildLinkRequest       = 14, ///< MLE SubChild Link Request
+        kSubTypeMleSubChildIdRequest         = 15, ///< MLE SubChild Id Request
+#endif
     };
 
     enum Priority : uint8_t
@@ -956,7 +968,7 @@ public:
      */
     void SetDatagramTag(uint32_t aTag) { GetMetadata().mDatagramTag = aTag; }
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     /**
      * Returns whether or not the message forwarding is scheduled for the child.
      *
@@ -984,15 +996,35 @@ public:
      */
     void SetChildMask(uint16_t aChildIndex);
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool GetParentPending(void) const;
+
+    void SetParentPending(void);
+
+    void ClearParentPending(void);
+
+    bool GetParentCandidatePending(void) const;
+
+    void SetParentCandidatePending(void);
+
+    void ClearParentCandidatePending(void);
+#endif
+
+    bool IsForNeighbor(const IndirectReachable &aNeighbor) const;
+
+    void SetForNeighbor(const IndirectReachable &aNeighbor);
+
+    void ClearForNeighbor(const IndirectReachable &aNeighbor);
+
     /**
-     * Returns whether or not the message forwarding is scheduled for at least one child.
+     * Returns whether or not the message forwarding is scheduled for at least one neighbor.
      *
-     * @retval TRUE   If message forwarding is scheduled for at least one child.
-     * @retval FALSE  If message forwarding is not scheduled for any child.
+     * @retval TRUE   If message forwarding is scheduled for at least one neighbor.
+     * @retval FALSE  If message forwarding is not scheduled for any neighbor.
      *
      */
-    bool IsChildPending(void) const;
-#endif // OPENTHREAD_FTD
+    bool IsTxPending(void) const;
+#endif // OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
     /**
      * Returns the RLOC16 of the mesh destination.

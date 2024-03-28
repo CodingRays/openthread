@@ -76,6 +76,7 @@ namespace ot {
 
 class SupervisionListener;
 class UnitTester;
+class MeshForwarder;
 
 /**
  * @namespace ot::Mle
@@ -109,6 +110,9 @@ class Mle : public InstanceLocator, private NonCopyable
 #if OPENTHREAD_FTD
     friend class MleRouter;
 #endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    friend class MleSubChild;
+#endif
     friend class DiscoverScanner;
     friend class ot::Instance;
     friend class ot::Notifier;
@@ -117,6 +121,9 @@ class Mle : public InstanceLocator, private NonCopyable
     friend class ot::LinkMetrics::Initiator;
 #endif
     friend class ot::UnitTester;
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    friend class ot::MeshForwarder;
+#endif
 
 public:
     /**
@@ -435,6 +442,17 @@ public:
     const Parent &GetParent(void) const { return mParent; }
 
     /**
+     * Checks if a neighbor reference is a reference to the parent.
+     *
+     * @param aNeighbor The neighbor to check.
+     *
+     * @retval TRUE If @param aNeighbor is a reference to the parent.
+     * @retval FALSE If @param aNeighbor is not a reference to the parent.
+     *
+     */
+    bool IsParent(const Neighbor &aNeighbor) const { return static_cast<const Neighbor*>(&mParent) == &aNeighbor; }
+
+    /**
      * The method retrieves information about the parent.
      *
      * @param[out] aParentInfo     Reference to a parent information structure.
@@ -452,6 +470,17 @@ public:
      *
      */
     Parent &GetParentCandidate(void) { return mParentCandidate; }
+
+    /**
+     * Checks if a neighbor reference is a reference to the parent candidate.
+     *
+     * @param aNeighbor The neighbor to check.
+     *
+     * @retval TRUE If @param aNeighbor is a reference to the parent candidate.
+     * @retval FALSE If @param aNeighbor is not a reference to the parent candidate.
+     *
+     */
+    bool IsParentCandidate(const Neighbor &aNeighbor) const { return static_cast<const Neighbor*>(&mParentCandidate) == &aNeighbor; }
 
     /**
      * Starts the process for child to search for a better parent while staying attached to its current
@@ -747,8 +776,43 @@ public:
      *
      */
     uint64_t CalcParentCslMetric(const Mac::CslAccuracy &aCslAccuracy) const;
-
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    /**
+     * Sets the length of the wakeup sequence used during the attach process.
+     *
+     * If the new min wakeup length is larger than the max wakeup length the max
+     * wakeup length will be set to the new min wakeup length.
+     *
+     * @param aWakeupLength  The length of the wakeup sequence used during the attach process.
+     *
+     */
+    void SetSubChildMinWakeupLength(uint16_t aWakeupLength);
+
+    /**
+     * Returns the length of the wakeup sequence used during the attach process.
+     *
+     * @return The length of the wakeup sequence used during the attach process.
+     *
+     */
+    uint16_t GetSubChildMinWakeupLength(void);
+
+    /**
+     * Sets the maximum length of the wakeup sequence used during the attach process.
+     *
+     * If the new max wakeup length is smaller than the min wakeup length the
+     * min wakeup length will be set to the new max wakeup length.
+     *
+     * @param aWakeupLength  The maximum length of the wakeup sequence used during the attach process.
+     *
+     */
+    void SetSubChildMaxWakeupLength(uint16_t aWakeupLength);
+
+    uint16_t GetSubChildMaxWakeupLength(void); 
+
+    uint32_t GetCslRoundTripTime(void);
+#endif // OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
 
 private:
     //------------------------------------------------------------------------------------------------------------------
@@ -778,6 +842,18 @@ private:
     static constexpr uint8_t kMaxTxCount                = 3; // Max tx count for MLE message
     static constexpr uint8_t kMaxCriticalTxCount        = 6; // Max tx count for critical MLE message
     static constexpr uint8_t kMaxChildKeepAliveAttempts = 4; // Max keep alive attempts before reattach
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    static constexpr uint16_t kParentRequestSubChildrenTimeout = 12000; ///< Sub children parent request timeout (in msec)
+                                                             
+    // The time before a scheduled phase shifted parent request that the message will be enqueued for send
+    static constexpr uint32_t kSubChildParentRequestEnqueueMs = 5;
+
+    // The default wakeup length used for phase shifted parent requests. In units of 10 symols.
+    static constexpr uint16_t kSubChildDefaultWakeupLength = 625;
+    // The guard time added before and after the wakeup sequence. In units of 10 symbols.
+    static constexpr uint16_t kSubChildWakeupGuardTime     = 31;
+#endif
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     // Attach backoff feature (CONFIG_ENABLE_ATTACH_BACKOFF) - Intervals are in milliseconds.
@@ -856,6 +932,10 @@ private:
         kBetterPartition, // Attach to a better (i.e. higher weight/partition id) Thread partition.
         kDowngradeToReed, // Attach to the same Thread partition during downgrade process.
         kBetterParent,    // Attach to a better parent.
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kSubChildren,        ///< Attach to a sub child. (Set by Mle::Attach based on timers).
+#endif
+
     };
 
     enum AttachState : uint8_t
@@ -906,6 +986,9 @@ private:
     {
         kToRouters,         // Parent Request to routers only.
         kToRoutersAndReeds, // Parent Request to all routers and REEDs.
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kToSubChildren,     // Parent Request to all sub children.
+#endif
     };
 
     enum ChildUpdateRequestState : uint8_t
@@ -960,6 +1043,11 @@ private:
         kTypeParentRequestToRouters,
         kTypeParentRequestToRoutersReeds,
         kTypeParentResponse,
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
+        kTypeParentRequest,
+        kTypeLinkRequest,
+        kTypeLinkAccept,
+#endif
 #if OPENTHREAD_FTD
         kTypeAddressRelease,
         kTypeAddressReleaseReply,
@@ -968,11 +1056,8 @@ private:
         kTypeChildUpdateRequestOfChild,
         kTypeChildUpdateResponseOfChild,
         kTypeChildUpdateResponseOfUnknownChild,
-        kTypeLinkAccept,
         kTypeLinkAcceptAndRequest,
         kTypeLinkReject,
-        kTypeLinkRequest,
-        kTypeParentRequest,
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         kTypeTimeSync,
 #endif
@@ -981,6 +1066,10 @@ private:
         kTypeLinkMetricsManagementRequest,
         kTypeLinkMetricsManagementResponse,
         kTypeLinkProbe,
+#endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kTypeParentRequestToSubChildren,
+        kTypeSubChildDetach,
 #endif
     };
 
@@ -1042,6 +1131,16 @@ private:
         Error AppendSteeringDataTlv(void);
         Error AppendAddressRegistrationTlv(Child &aChild);
 #endif
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        Error AppendToSubChildTlv(Child &aChild);
+        Error AppendToSubChildTlv(uint16_t aRloc16, const Mac::ExtAddress &aExtAddress);
+#endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        Error AppendSubChildLinkTlv(void);
+        Error AppendFromSubChildTlv(void);
+        Error AppendFromSubChildTlv(uint16_t aParentRloc);
+        Error AppendFromSubChildTlv(Mac::ExtAddress &aChildAddress);
+#endif
         template <uint8_t kArrayLength> Error AppendTlvRequestTlv(const uint8_t (&aTlvArray)[kArrayLength])
         {
             return AppendTlvRequestTlv(aTlvArray, kArrayLength);
@@ -1070,6 +1169,12 @@ private:
 #endif
 #if OPENTHREAD_FTD
         Error ReadRouteTlv(RouteTlv &aRouteTlv) const;
+#endif
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        Error ReadFromSubChildTlv(uint16_t &aRloc16) const;
+        Error ReadFromSubChildTlv(uint16_t &aRloc16, Mac::ExtAddress &aExtAddr, bool &aExtPresent) const;
+        Error ReadToSubChildTlv(uint16_t &aRloc16) const;
+        Error ReadToSubChildTlv(uint16_t &aRloc16, Mac::ExtAddress &aExtAddr, bool &aExtPresent) const;
 #endif
 
     private:
@@ -1276,8 +1381,14 @@ private:
     void       ProcessAnnounce(void);
     bool       HasUnregisteredAddress(void);
     uint32_t   GetAttachStartDelay(void) const;
-    void       SendParentRequest(ParentRequestType aType);
+    Error      SendParentRequest(ParentRequestType aType);
     Error      SendChildIdRequest(void);
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    Error    SendParentResponse(Child *aChild, const RxChallenge &aChallenge);
+    Error    SendLinkRequest(void);
+    Error    SendLinkAccept(Child *aChild);
+    Error    SendDetachMessage(Child &aChild);
+#endif
     Error      GetNextAnnounceChannel(uint8_t &aChannel) const;
     bool       HasMoreChannelsToAnnounce(void) const;
     bool       PrepareAnnounceState(void);
@@ -1298,6 +1409,12 @@ private:
                                       const Ip6::MessageInfo &aMessageInfo,
                                       uint16_t                aCmdOffset,
                                       const SecurityHeader   &aHeader);
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool     UpdateSubChildAttachTime(void);
+
+    uint16_t OnWakeupTransmitStart(void); // Called by the mac layer when a wakeup transmit starts. Must return the wakeup length in units of ten symbols. A return value of 0 aborts the transmit.
+    void     OnWakeupCollisionAvoidanceFail(uint32_t aDeltaMs); // Called by the mac layer when the collision avoidance check before a wakeup transmit fails. Delta is the number of ms until the end of the conflicting wakeup sequence.
+#endif
     void RemoveDelayedMessage(Message::SubType aSubType, MessageType aMessageType, const Ip6::Address *aDestination);
     void RemoveDelayedDataRequestMessage(const Ip6::Address &aDestination);
 
@@ -1397,6 +1514,9 @@ private:
 #if OPENTHREAD_FTD
     uint8_t mLinkRequestAttempts;
 #endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    uint8_t  mPrefixLength; ///< The rloc prefix length assigend to this device. Only valid if we are attached. If we are attached to a non sub child enabled parent must be 9.
+#endif
     uint16_t mRloc16;
     uint16_t mPreviousParentRloc;
     uint16_t mAttachCounter;
@@ -1429,6 +1549,11 @@ private:
 #if OPENTHREAD_CONFIG_MLE_PARENT_RESPONSE_CALLBACK_API_ENABLE
     Callback<otThreadParentResponseCallback> mParentResponseCallback;
 #endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    TimeMilli mNextAttachTime;          ///< The next time a standard attach sequence should be attempted
+    TimeMilli mNextSubChildAttachTime;  ///< The next time a sub child attach sequence should be attempted
+#endif
+
     AttachTimer                  mAttachTimer;
     DelayTimer                   mDelayedResponseTimer;
     MsgTxTimer                   mMessageTransmissionTimer;
@@ -1439,6 +1564,13 @@ private:
     Ip6::Netif::UnicastAddress   mMeshLocal16;
     Ip6::Netif::MulticastAddress mLinkLocalAllThreadNodes;
     Ip6::Netif::MulticastAddress mRealmLocalAllThreadNodes;
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    uint16_t mMinWakeupLength;  //< The minimum length of the wakeup sequence used.
+    uint16_t mMaxWakeupLength;  //< The maximum length used for a wakeup sequence.
+    uint16_t mCurrentWakeupLength;
+    uint16_t mSubChildAttachAttempt;
+#endif
 };
 
 } // namespace Mle

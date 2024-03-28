@@ -372,6 +372,12 @@ bool Address::IsLinkLocalAllRoutersMulticast(void) const { return (*this == GetL
 
 void Address::SetToLinkLocalAllRoutersMulticast(void) { *this = GetLinkLocalAllRoutersMulticast(); }
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+bool Address::IsLinkLocalAllSubChildrenMulticast(void) const { return (*this == GetLinkLocalAllSubChildrenMulticast()); }
+
+void Address::SetToLinkLocalAllSubChildrenMulticast(void) { *this = GetLinkLocalAllSubChildrenMulticast(); }
+#endif
+
 bool Address::IsRealmLocalMulticast(void) const { return IsMulticast() && (GetScope() == kRealmLocalScope); }
 
 bool Address::IsMulticastLargerThanRealmLocal(void) const { return IsMulticast() && (GetScope() > kRealmLocalScope); }
@@ -712,6 +718,11 @@ const Address &Address::GetLinkLocalAllNodesMulticast(void)
 const Address &Address::GetLinkLocalAllRoutersMulticast(void)
 {
     return AsCoreType(&Netif::kLinkLocalAllRoutersMulticastAddress.mAddress);
+}
+
+const Address &Address::GetLinkLocalAllSubChildrenMulticast(void)
+{
+    return AsCoreType(&Netif::kLinkLocalAllSubChildrenMulticastAddress.mAddress);
 }
 
 const Address &Address::GetRealmLocalAllNodesMulticast(void)

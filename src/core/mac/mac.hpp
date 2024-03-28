@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, The OpenThread Authors.
+ *  Copyright (c) 2017, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -89,6 +89,11 @@ constexpr uint8_t kMaxFrameRetriesCsl             = 0;
 constexpr uint8_t kTxNumBcast = OPENTHREAD_CONFIG_MAC_TX_NUM_BCAST; ///< Num of times broadcast frame is tx.
 
 constexpr uint16_t kMinCslIePeriod = OPENTHREAD_CONFIG_MAC_CSL_MIN_PERIOD;
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+constexpr uint32_t kWakeupRendezvousAhead = 5;    ///< Time before a rendezvous that the receive is enabled (in msec).
+constexpr uint32_t kRendezvousReceiveTimeout = 10; ///< Timeout for the receive after the rendezvous time
+#endif
 
 /**
  * Defines the function pointer called on receiving an IEEE 802.15.4 Beacon during an Active Scan.
@@ -209,14 +214,15 @@ public:
      */
     void RequestDirectFrameTransmission(void);
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     /**
      * Requests an indirect data frame transmission.
      *
      */
     void RequestIndirectFrameTransmission(void);
+#endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     /**
      * Requests `Mac` to start a CSL tx operation after a delay of @p aDelay time.
      *
@@ -224,8 +230,6 @@ public:
      *
      */
     void RequestCslFrameTransmission(uint32_t aDelay);
-#endif
-
 #endif
 
     /**
@@ -358,7 +362,7 @@ public:
      */
     void SetMaxFrameRetriesDirect(uint8_t aMaxFrameRetriesDirect) { mMaxFrameRetriesDirect = aMaxFrameRetriesDirect; }
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     /**
      * Returns the maximum number of frame retries during indirect transmission.
      *
@@ -441,7 +445,7 @@ public:
      */
     bool IsEnergyScanInProgress(void) const { return IsActiveOrPending(kOperationEnergyScan); }
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     /**
      * Indicates whether the MAC layer is performing an indirect transmission (in middle of a tx).
      *
@@ -677,25 +681,6 @@ public:
      *
      */
     bool IsCslSupported(void) const;
-
-    /**
-     * Returns parent CSL accuracy (clock accuracy and uncertainty).
-     *
-     * @returns The parent CSL accuracy.
-     *
-     */
-    const CslAccuracy &GetCslParentAccuracy(void) const { return mLinks.GetSubMac().GetCslParentAccuracy(); }
-
-    /**
-     * Sets parent CSL accuracy.
-     *
-     * @param[in] aCslAccuracy  The parent CSL accuracy.
-     *
-     */
-    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy)
-    {
-        mLinks.GetSubMac().SetCslParentAccuracy(aCslAccuracy);
-    }
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE && OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -751,6 +736,19 @@ public:
      */
     Error GetRegion(uint16_t &aRegionCode) const;
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    /**
+     * Enales the receiver until the specified time stamp. This overrules any
+     * other rx off setting.
+     *
+     * Can be called multiple times and the longest time will be used.
+     *
+     * @param aEnd  The timestamp at which point the receiver may be turned off again.
+     *
+     */
+    void SetMessageRxOnUntil(TimeMilli aEnd);
+#endif
+
 private:
     static constexpr uint16_t kMaxCcaSampleCount = OPENTHREAD_CONFIG_CCA_FAILURE_RATE_AVERAGING_WINDOW;
 
@@ -763,11 +761,16 @@ private:
         kOperationTransmitDataDirect,
         kOperationTransmitPoll,
         kOperationWaitingForData,
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
         kOperationTransmitDataIndirect,
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#endif
+#if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
         kOperationTransmitDataCsl,
 #endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kOperationCslWakeupGuard,     ///< Verifying that no other device currently transmits a wakeup sequence
+        kOperationCslWakeup,          ///< Transmitting a wakeup sequence. Transitions to kOperationTransmitDataCsl afterwards for the payload
+        kOperationAwaitingRendezvous, ///< Received a rendezvous packet and is awaiting the rendezvous time
 #endif
     };
 
@@ -817,6 +820,11 @@ private:
     bool     HandleMacCommand(RxFrame &aFrame);
     void     HandleTimer(void);
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    void     HandleMessageRxOnTimer(void);
+    TxFrame *PrepareWakeupFrame(TxFrames &aTxFrames);
+#endif
+
     void  Scan(Operation aScanOperation, uint32_t aScanChannels, uint16_t aScanDuration);
     Error UpdateScanChannel(void);
     void  PerformActiveScan(void);
@@ -833,8 +841,11 @@ private:
     uint8_t GetTimeIeOffset(const Frame &aFrame);
 #endif
 
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     void ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr);
+#endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    void ProcessCslWakeup(const RxFrame &aFrame);
 #endif
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
     void ProcessEnhAckProbing(const RxFrame &aFrame, const Neighbor &aNeighbor);
@@ -843,6 +854,10 @@ private:
 
     using OperationTask = TaskletIn<Mac, &Mac::PerformNextOperation>;
     using MacTimer      = TimerMilliIn<Mac, &Mac::HandleTimer>;
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    using MessageRxOnTimer = TimerMilliIn<Mac, &Mac::HandleMessageRxOnTimer>;
+#endif
 
     static const otExtAddress sMode2ExtAddress;
 
@@ -869,7 +884,7 @@ private:
     uint16_t    mScanDuration;
     ChannelMask mScanChannelMask;
     uint8_t     mMaxFrameRetriesDirect;
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     uint8_t mMaxFrameRetriesIndirect;
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     TimeMilli mCslTxFireTime;
@@ -879,6 +894,17 @@ private:
     // When Mac::mCslChannel is 0, it indicates that CSL channel has not been specified by the upper layer.
     uint8_t  mCslChannel;
     uint16_t mCslPeriod;
+#endif
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    TimeMicro mCslWakeupEnd;               ///< The timestamp at which to transmit the payload frame.
+    uint16_t  mCslWakeupFrameCounter : 15; ///< The number of wakeup frames already sent in the current sequence. During the wakeup collision check used to store the number of ms until the end of a colliding wakeup sequence.
+    bool      mCslWakeupLastFrame : 1;     ///< Set to true after the last frame of the csl wakeup sequence has been transmitted. Before starting the wakeup sequence true indicates that the wakeup collision check has failed.
+    TimeMilli mAwaitRendezvousTime;        ///< The timestamp at which the last recevied wakeup sequence ends
+
+    MessageRxOnTimer mMessageRxOnTimer;
+    TimeMilli        mMessageRxOnUntil;
+    bool             mMessageRxOn;
 #endif
 
     union

@@ -127,6 +127,15 @@ bool Neighbor::IsStateValidOrAttaching(void) const
     case kStateInvalid:
     case kStateParentRequest:
     case kStateParentResponse:
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    case kStateSubChildParentRequest:
+    case kStateSubChildParentResponse:
+    case kStateSubChildLinkRequest:
+    case kStateSubChildLinkAccept:
+    case kStateSubChildIdRequest:
+    case kStateDetachPending:
+#endif
+
         break;
 
     case kStateRestored:
@@ -134,6 +143,39 @@ bool Neighbor::IsStateValidOrAttaching(void) const
     case kStateLinkRequest:
     case kStateChildUpdateRequest:
     case kStateValid:
+        rval = true;
+        break;
+    }
+
+    return rval;
+}
+
+bool Neighbor::IsStateWithSecurityReady(void) const
+{
+    bool rval = false;
+
+    switch (GetState())
+    {
+    case kStateInvalid:
+    case kStateRestored:
+    case kStateParentRequest:
+    case kStateParentResponse:
+    case kStateChildIdRequest:
+    case kStateLinkRequest:
+    case kStateChildUpdateRequest:
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    case kStateSubChildParentRequest:
+    case kStateSubChildParentResponse:
+    case kStateDetachPending:
+#endif
+        break;
+
+    case kStateValid:
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    case kStateSubChildLinkRequest:
+    case kStateSubChildLinkAccept:
+    case kStateSubChildIdRequest:
+#endif
         rval = true;
         break;
     }
@@ -178,6 +220,16 @@ bool Neighbor::MatchesFilter(StateFilter aFilter) const
     case kInStateAny:
         matches = true;
         break;
+
+    case kInStateWithSecurityReady:
+        matches = IsStateWithSecurityReady();
+        break;
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    case kInStateDetachPending:
+        matches = IsStateDetachPending();
+        break;
+#endif
     }
 
     return matches;
@@ -244,6 +296,13 @@ const char *Neighbor::StateToString(State aState)
         "LinkReq",        // (5) kStateLinkRequest
         "ChildUpdateReq", // (6) kStateChildUpdateRequest
         "Valid",          // (7) kStateValid
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        "SCParentReq",    // (8) kStateSubChildParentRequest
+        "SCParentRes",    // (9) kStateSubChildParentResponse
+        "SCLinkReq",      // (10) kStateSubChildLinkRequest
+        "SCLinkAccept",   // (11) kStateSubChildLinkAccept
+        "SCIdRequest",    // (12) kStateSubChildIdRequest
+#endif
     };
 
     static_assert(0 == kStateInvalid, "kStateInvalid value is incorrect");
@@ -255,7 +314,15 @@ const char *Neighbor::StateToString(State aState)
     static_assert(6 == kStateChildUpdateRequest, "kStateChildUpdateRequest value is incorrect");
     static_assert(7 == kStateValid, "kStateValid value is incorrect");
 
-    return kStateStrings[aState];
+ #if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    static_assert(8 == kStateSubChildParentRequest, "kStateSubChildParentRequest value is incorrect");
+    static_assert(9 == kStateSubChildParentResponse, "kStateSubChildParentResponse value is incorrect");
+    static_assert(10 == kStateSubChildLinkRequest, "kStateSubChildLinkRequest value is incorrect");
+    static_assert(11 == kStateSubChildLinkAccept, "kStateSubChildLinkAccept value is incorrect");
+    static_assert(12 == kStateSubChildIdRequest, "kStateSubChildIdRequest value is incorrect");
+#endif
+
+   return kStateStrings[aState];
 }
 
 } // namespace ot
