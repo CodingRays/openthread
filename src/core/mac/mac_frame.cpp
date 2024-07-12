@@ -1132,6 +1132,10 @@ template <> void Frame::InitIeContentAt<TimeIe>(uint8_t &aIndex)
 template <> void Frame::InitIeContentAt<CslIe>(uint8_t &aIndex) { aIndex += sizeof(CslIe); }
 #endif
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+template <> void Frame::InitIeContentAt<RendezvousIe>(uint8_t &aIndex) { aIndex += sizeof(RendezvousIe); }
+#endif
+
 template <> void Frame::InitIeContentAt<Termination2Ie>(uint8_t &aIndex) { OT_UNUSED_VARIABLE(aIndex); }
 #endif // OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
 
@@ -1306,6 +1310,9 @@ template Error Frame::AppendHeaderIeAt<TimeIe>(uint8_t &aIndex);
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 template Error Frame::AppendHeaderIeAt<CslIe>(uint8_t &aIndex);
+#endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+template Error Frame::AppendHeaderIeAt<RendezvousIe>(uint8_t &aIndex);
 #endif
 template Error Frame::AppendHeaderIeAt<Termination2Ie>(uint8_t &aIndex);
 #endif

@@ -36,7 +36,7 @@
 
 #include "openthread-core-config.h"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/locator.hpp"
 #include "common/message.hpp"
@@ -60,6 +60,7 @@ namespace ot {
  */
 
 class Child;
+class IndirectReachable;
 
 /**
  * Implements indirect transmission.
@@ -69,7 +70,7 @@ class IndirectSender : public InstanceLocator, public IndirectSenderBase, privat
 {
     friend class Instance;
     friend class DataPollHandler::Callbacks;
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     friend class CslTxScheduler::Callbacks;
 #endif
 
@@ -119,6 +120,19 @@ public:
         bool IsWaitingForMessageUpdate(void) const { return mWaitingForMessageUpdate; }
         void SetWaitingForMessageUpdate(bool aNeedsUpdate) { mWaitingForMessageUpdate = aNeedsUpdate; }
 
+        uint8_t GetIndirectTxAttempts(void) const { return mIndirectTxAttempts; }
+        void    ResetIndirectTxAttempts(void) { mIndirectTxAttempts = 0; }
+        void    IncrementIndirectTxAttempts(void) { mIndirectTxAttempts++; }
+
+        uint8_t GetIndirectDataSequenceNumber(void) const { return mIndirectDsn; }
+        void    SetIndirectDataSequenceNumber(uint8_t aDsn) { mIndirectDsn = aDsn; }
+
+        uint32_t GetIndirectFrameCounter(void) const { return mIndirectFrameCounter; }
+        void     SetIndirectFrameCounter(uint32_t aFrameCounter) { mIndirectFrameCounter = aFrameCounter; }
+
+        uint8_t GetIndirectKeyId(void) const { return mIndirectKeyId; }
+        void    SetIndirectKeyId(uint8_t aKeyId) { mIndirectKeyId = aKeyId; }
+
         const Mac::Address &GetMacAddress(Mac::Address &aMacAddress) const;
 
         Message *mIndirectMessage;             // Current indirect message.
@@ -128,6 +142,11 @@ public:
         uint16_t mQueuedMessageCount : 14;     // Number of queued indirect messages for the child.
         bool     mUseShortAddress : 1;         // Indicates whether to use short or extended address.
         bool     mSourceMatchPending : 1;      // Indicates whether or not pending to add to src match table.
+
+        uint32_t mIndirectFrameCounter;    // Frame counter for current indirect frame (used for retx).
+        uint8_t  mIndirectKeyId;           // Key Id for current indirect frame (used for retx).
+        uint8_t  mIndirectDsn;             // MAC level Data Sequence Number (DSN) for retx attempts.
+        uint8_t  mIndirectTxAttempts;      // Number of data poll triggered tx attempts.
 
         static_assert(OPENTHREAD_CONFIG_NUM_MESSAGE_BUFFERS < (1UL << 14),
                       "mQueuedMessageCount cannot fit max required!");
@@ -162,7 +181,7 @@ public:
      * @param[in] aChild    The (sleepy) child for indirect transmission.
      *
      */
-    void AddMessageForSleepyChild(Message &aMessage, Child &aChild);
+    void AddMessageForSleepyChild(Message &aMessage, IndirectReachable &aChild);
 
     /**
      * Removes a message for indirect transmission to a sleepy child.
@@ -174,7 +193,7 @@ public:
      * @retval kErrorNotFound      The message was not scheduled for indirect transmission to the child.
      *
      */
-    Error RemoveMessageFromSleepyChild(Message &aMessage, Child &aChild);
+    Error RemoveMessageFromSleepyChild(Message &aMessage, IndirectReachable &aChild);
 
     /**
      * Removes all added messages for a specific child and frees message (with no indirect/direct tx).
@@ -182,7 +201,7 @@ public:
      * @param[in]  aChild  A reference to a child whose messages shall be removed.
      *
      */
-    void ClearAllMessagesForSleepyChild(Child &aChild);
+    void ClearAllMessagesForSleepyChild(IndirectReachable &aChild);
 
     /**
      * Sets whether to use the extended or short address for a child.
@@ -191,7 +210,7 @@ public:
      * @param[in] aUseShortAddress  `true` to use short address, `false` to use extended address.
      *
      */
-    void SetChildUseShortAddress(Child &aChild, bool aUseShortAddress);
+    void SetChildUseShortAddress(IndirectReachable &aChild, bool aUseShortAddress);
 
     /**
      * Handles a child mode change and updates any queued messages for the child accordingly.
@@ -200,25 +219,27 @@ public:
      * @param[in]  aOldMode  The old device mode of the child.
      *
      */
-    void HandleChildModeChange(Child &aChild, Mle::DeviceMode aOldMode);
+    void HandleChildModeChange(IndirectReachable &aChild, Mle::DeviceMode aOldMode);
 
 private:
     // Callbacks from DataPollHandler
-    Error PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, Child &aChild);
-    void  HandleSentFrameToChild(const Mac::TxFrame &aFrame, const FrameContext &aContext, Error aError, Child &aChild);
-    void  HandleFrameChangeDone(Child &aChild);
+    Error PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectReachable &aChild);
+    void  HandleSentFrameToChild(const Mac::TxFrame &aFrame, const FrameContext &aContext, Error aError, IndirectReachable &aChild);
+    void  HandleFrameChangeDone(IndirectReachable &aChild);
 
-    void     UpdateIndirectMessage(Child &aChild);
-    Message *FindIndirectMessage(Child &aChild, bool aSupervisionTypeOnly = false);
-    void     RequestMessageUpdate(Child &aChild);
-    uint16_t PrepareDataFrame(Mac::TxFrame &aFrame, Child &aChild, Message &aMessage);
-    void     PrepareEmptyFrame(Mac::TxFrame &aFrame, Child &aChild, bool aAckRequest);
+    void     UpdateIndirectMessage(IndirectReachable &aChild);
+    Message *FindIndirectMessage(IndirectReachable &aChild, bool aSupervisionTypeOnly = false);
+    void     RequestMessageUpdate(IndirectReachable &aChild);
+    uint16_t PrepareDataFrame(Mac::TxFrame &aFrame, IndirectReachable &aChild, Message &aMessage);
+    void     PrepareEmptyFrame(Mac::TxFrame &aFrame, IndirectReachable &aChild, bool aAckRequest);
     void     ClearMessagesForRemovedChildren(void);
 
-    bool                  mEnabled;
+    bool mEnabled;
+
     SourceMatchController mSourceMatchController;
-    DataPollHandler       mDataPollHandler;
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+
+    DataPollHandler mDataPollHandler;
+#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     CslTxScheduler mCslTxScheduler;
 #endif
 };
@@ -230,6 +251,6 @@ private:
 
 } // namespace ot
 
-#endif // OPENTHREAD_FTD
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #endif // INDIRECT_SENDER_HPP_

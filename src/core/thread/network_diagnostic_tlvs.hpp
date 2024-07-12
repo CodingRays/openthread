@@ -97,6 +97,7 @@ public:
         kQueryId             = OT_NETWORK_DIAGNOSTIC_TLV_QUERY_ID,
         kMleCounters         = OT_NETWORK_DIAGNOSTIC_TLV_MLE_COUNTERS,
         kVendorAppUrl        = OT_NETWORK_DIAGNOSTIC_TLV_VENDOR_APP_URL,
+        kChildSubChildInfo   = OT_NETWORK_DIAGNOSTIC_TLV_CHILD_SUB_CHILD_INFO,
     };
 
     /**

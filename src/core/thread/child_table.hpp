@@ -36,7 +36,7 @@
 
 #include "openthread-core-config.h"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/const_cast.hpp"
 #include "common/iterator_utils.hpp"
@@ -124,6 +124,8 @@ public:
      *
      */
     uint16_t GetChildIndex(const Child &aChild) const { return static_cast<uint16_t>(&aChild - mChildren); }
+
+    Error GetNeighborIndex(const Neighbor &aNeighbor, uint16_t &aIndex) const;
 
     /**
      * Returns a pointer to a `Child` entry at a given index, or `nullptr` if the index is out of bounds,
@@ -267,6 +269,7 @@ public:
      */
     Error GetChildInfoByIndex(uint16_t aChildIndex, Child::Info &aChildInfo);
 
+#if OPENTHREAD_FTD
     /**
      * Restores child table from non-volatile memory.
      *
@@ -316,6 +319,7 @@ public:
      *
      */
     bool HasSleepyChildWithAddress(const Ip6::Address &aIp6Address) const;
+#endif // OPENTHREAD_FTD
 
     /**
      * Indicates whether the child table contains a given `Neighbor` instance.
@@ -363,6 +367,6 @@ private:
 
 } // namespace ot
 
-#endif // OPENTHREAD_FTD
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #endif // CHILD_TABLE_HPP_

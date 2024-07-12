@@ -1199,15 +1199,57 @@ static uint8_t generateAckIeData(uint8_t *aLinkMetricsIeData, uint8_t aLinkMetri
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 otError otPlatRadioEnableCsl(otInstance         *aInstance,
-                             uint32_t            aCslPeriod,
-                             otShortAddress      aShortAddr,
-                             const otExtAddress *aExtAddr)
+                             uint32_t            aCslPeriod)
 {
     OT_UNUSED_VARIABLE(aInstance);
-    OT_UNUSED_VARIABLE(aShortAddr);
-    OT_UNUSED_VARIABLE(aExtAddr);
 
     sCslPeriod = aCslPeriod;
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioAddCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aShortAddress);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioAddCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aExtAddress);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioClearCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aShortAddress);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioClearCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aExtAddress);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioClearCslShortEntries(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioClearCslExtEntries(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
 
     return OT_ERROR_NONE;
 }

@@ -1149,6 +1149,8 @@ otError otPlatRadioGetCoexMetrics(otInstance *aInstance, otRadioCoexMetrics *aCo
 /**
  * Enable or disable CSL receiver.
  *
+ * A call to this function will clear the entry table.
+ *
  * @param[in]  aInstance     The OpenThread instance structure.
  * @param[in]  aCslPeriod    CSL period, 0 for disabling CSL. CSL period is in unit of 10 symbols.
  * @param[in]  aShortAddr    The short source address of CSL receiver's peer.
@@ -1162,9 +1164,19 @@ otError otPlatRadioGetCoexMetrics(otInstance *aInstance, otRadioCoexMetrics *aCo
  *
  */
 otError otPlatRadioEnableCsl(otInstance         *aInstance,
-                             uint32_t            aCslPeriod,
-                             otShortAddress      aShortAddr,
-                             const otExtAddress *aExtAddr);
+                             uint32_t            aCslPeriod);
+
+otError otPlatRadioAddCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress);
+
+otError otPlatRadioAddCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress);
+
+otError otPlatRadioClearCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress);
+
+otError otPlatRadioClearCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress);
+
+otError otPlatRadioClearCslShortEntries(otInstance *aInstance);
+
+otError otPlatRadioClearCslExtEntries(otInstance *aInstance);
 
 /**
  * Reset CSL receiver in the platform.

@@ -47,10 +47,12 @@
 #include "common/timer.hpp"
 #include "mac/mac_types.hpp"
 #include "thread/child.hpp"
+#include "thread/mle_sub_child.hpp"
 
 namespace ot {
 
 class ThreadNetif;
+class IndirectReachable;
 
 /**
  *
@@ -82,7 +84,7 @@ class ThreadNetif;
  *
  */
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 /**
  * Implements a child supervisor.
@@ -92,6 +94,9 @@ class ChildSupervisor : public InstanceLocator, private NonCopyable
 {
     friend class ot::Notifier;
     friend class ot::TimeTicker;
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    friend class Mle::MleSubChild;
+#endif
 
 public:
     /**
@@ -111,7 +116,7 @@ public:
      *           type.
      *
      */
-    Child *GetDestination(const Message &aMessage) const;
+    IndirectReachable *GetDestination(const Message &aMessage) const;
 
     /**
      * Updates the supervision state for a child. It informs the child supervisor that a message was
@@ -120,18 +125,18 @@ public:
      * @param[in] aChild     The child to which a message was successfully sent.
      *
      */
-    void UpdateOnSend(Child &aChild);
+    void UpdateOnSend(IndirectReachable &aChild);
 
 private:
     static constexpr uint16_t kDefaultSupervisionInterval = OPENTHREAD_CONFIG_CHILD_SUPERVISION_INTERVAL; // (seconds)
 
-    void SendMessage(Child &aChild);
+    void SendMessage(IndirectReachable &aChild);
     void CheckState(void);
     void HandleTimeTick(void);
     void HandleNotifierEvents(Events aEvents);
 };
 
-#endif // #if OPENTHREAD_FTD
+#endif // #if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 /**
  * Implements a child supervision listener.

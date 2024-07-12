@@ -1224,7 +1224,11 @@ Error Ip6::HandleDatagram(OwnedPtr<Message> aMessagePtr, bool aIsReassembled)
     {
         if (aMessagePtr->IsOriginThreadNetif())
         {
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+            VerifyOrExit(Get<Mle::Mle>().IsChild());
+#else
             VerifyOrExit(Get<Mle::Mle>().IsRouterOrLeader());
+#endif
             header.SetHopLimit(header.GetHopLimit() - 1);
         }
 

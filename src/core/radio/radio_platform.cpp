@@ -253,7 +253,7 @@ OT_TOOL_WEAK uint32_t otPlatRadioGetBusSpeed(otInstance *aInstance)
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 OT_TOOL_WEAK otError otPlatRadioResetCsl(otInstance *aInstance)
 {
-    return otPlatRadioEnableCsl(aInstance, 0, Mac::kShortAddrInvalid, nullptr);
+    return otPlatRadioEnableCsl(aInstance, 0);
 }
 #endif
 

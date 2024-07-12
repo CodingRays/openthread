@@ -199,7 +199,7 @@ Instance::Instance(void)
     , mSrpAdvertisingProxy(*this)
 #endif
 #endif
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     , mChildSupervisor(*this)
 #endif
     , mSupervisionListener(*this)

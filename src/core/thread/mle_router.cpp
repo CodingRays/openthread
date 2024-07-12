@@ -66,7 +66,11 @@ MleRouter::MleRouter(Instance &aInstance)
     , mChildTable(aInstance)
     , mRouterTable(aInstance)
     , mChallengeTimeout(0)
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    , mNextChildId((1 << kRlocAddressSpaceTable[0]) - 1)
+#else
     , mNextChildId(kMaxChildId)
+#endif
     , mNetworkIdTimeout(kNetworkIdTimeout)
     , mRouterUpgradeThreshold(kRouterUpgradeThreshold)
     , mRouterDowngradeThreshold(kRouterDowngradeThreshold)
@@ -1491,6 +1495,29 @@ exit:
     return haveNeighbor;
 }
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+void MleRouter::SendChildDetachResponse(Child &aSubChildParent, const Mac::ExtAddress &aSubChild)
+{ 
+    Error        error = kErrorNone;
+    Ip6::Address destination;
+    TxMessage   *message;
+
+    VerifyOrExit((message = NewMleMessage(kCommandChildUpdateResponse)) != nullptr, error = kErrorNoBufs);
+
+    SuccessOrExit(error = message->AppendToSubChildTlv(aSubChildParent.GetRloc16(), aSubChild));
+    SuccessOrExit(error = message->AppendTimeoutTlv(0));
+
+    destination.SetToLinkLocalAddress(aSubChildParent.GetNextHop().GetExtAddress());
+
+    SuccessOrExit(error = message->SendTo(destination));
+
+    Log(kMessageSend, kTypeChildIdResponse, destination,  aSubChildParent.GetRloc16());
+
+exit:
+    FreeMessageOnError(message, error);
+}
+#endif
+
 void MleRouter::HandleTimeTick(void)
 {
     bool roleTransitionTimeoutExpired = false;
@@ -1612,14 +1639,19 @@ void MleRouter::HandleTimeTick(void)
         }
 #endif
 
-        if (TimerMilli::GetNow() - child.GetLastHeard() >= timeout)
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        if (child.IsDirectChild())
+#endif
         {
-            LogInfo("Child 0x%04x timeout expired", child.GetRloc16());
-            RemoveNeighbor(child);
-        }
-        else if (IsRouterOrLeader() && child.IsStateRestored())
-        {
-            IgnoreError(SendChildUpdateRequest(child));
+            if (TimerMilli::GetNow() - child.GetLastHeard() >= timeout)
+            {
+                LogInfo("Child 0x%04x timeout expired", child.GetRloc16());
+                RemoveNeighbor(child);
+            }
+            else if (IsRouterOrLeader() && child.IsStateRestored())
+            {
+                IgnoreError(SendChildUpdateRequest(child));
+            }
         }
     }
 
@@ -1974,6 +2006,12 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
     Child             *child;
     Router            *router;
     uint16_t           supervisionInterval;
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    uint8_t         maxSubChildren = 0;
+    uint16_t        parentSubChild;
+    Mac::ExtAddress subChildExtAddr;
+    bool            isSubChild;
+#endif
 
     Log(kMessageReceive, kTypeChildIdRequest, aRxInfo.mMessageInfo.GetPeerAddr());
 
@@ -1983,37 +2021,102 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
 
     aRxInfo.mMessageInfo.GetPeerAddr().GetIid().ConvertToExtAddress(extAddr);
 
-    child = mChildTable.FindChild(extAddr, Child::kInStateAnyExceptInvalid);
-    VerifyOrExit(child != nullptr, error = kErrorAlready);
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    switch (aRxInfo.mMessage.ReadFromSubChildTlv(parentSubChild, subChildExtAddr, isSubChild))
+    {
+    case kErrorNone:
+        // ExtAddress must be present in a ChildIdRequest
+        if (!isSubChild)
+        {
+            ExitNow(error = kErrorParse);
+        }
+        break;
 
-    SuccessOrExit(error = aRxInfo.mMessage.ReadVersionTlv(version));
+    case kErrorParse:
+        ExitNow(error = kErrorParse);
+        break;
 
-    SuccessOrExit(error = aRxInfo.mMessage.ReadAndMatchResponseTlvWith(child->GetChallenge()));
+    default:
+        isSubChild = false;
+        break;
+    }
+
+    if (isSubChild)
+    {
+        Child *subChildParent = nullptr;
+
+        SuccessOrExit(error = aRxInfo.mMessage.ReadVersionTlv(version));
+        VerifyOrExit(version >= kThreadVersion1p3, error = kErrorParse);
+
+        for (Child &c : mChildTable.Iterate(Neighbor::kInStateValid))
+        {
+            if (c.GetRloc16() == parentSubChild)
+            {
+                subChildParent = &c;
+                break;
+            }
+        }
+
+        VerifyOrExit(subChildParent != nullptr, error = kErrorNotFound);
+
+        child = mChildTable.FindChild(subChildExtAddr, Child::kInStateAnyExceptInvalid);
+        if (child == nullptr)
+        {
+            child = mChildTable.GetNewChild();
+            VerifyOrExit(child != nullptr, error = kErrorNoBufs);
+
+            InitNeighbor(*child, aRxInfo);
+            child->GetExtAddress() = subChildExtAddr;
+        }
+
+        child->SetState(Neighbor::kStateChildIdRequest);
+        child->SetSubChildParent(*subChildParent);
+    }
+    else
+#endif // OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    {
+        child = mChildTable.FindChild(extAddr, Child::kInStateAnyExceptInvalid);
+        VerifyOrExit(child != nullptr, error = kErrorAlready);
+
+        SuccessOrExit(error = aRxInfo.mMessage.ReadVersionTlv(version));
+        VerifyOrExit(version >= kThreadVersion1p1, error = kErrorParse);
+
+        SuccessOrExit(error = aRxInfo.mMessage.ReadAndMatchResponseTlvWith(child->GetChallenge()));
+    }
 
     Get<MeshForwarder>().RemoveMessages(*child, Message::kSubTypeMleGeneral);
     Get<MeshForwarder>().RemoveMessages(*child, Message::kSubTypeMleChildIdRequest);
     Get<MeshForwarder>().RemoveMessages(*child, Message::kSubTypeMleChildUpdateRequest);
     Get<MeshForwarder>().RemoveMessages(*child, Message::kSubTypeMleDataResponse);
 
-    SuccessOrExit(error = aRxInfo.mMessage.ReadFrameCounterTlvs(linkFrameCounter, mleFrameCounter));
-
     SuccessOrExit(error = aRxInfo.mMessage.ReadModeTlv(mode));
 
-    SuccessOrExit(error = Tlv::Find<TimeoutTlv>(aRxInfo.mMessage, timeout));
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (isSubChild)
+    {
+        VerifyOrExit(!mode.IsFullThreadDevice(), error = kErrorParse);
+    }
+    else
+#endif
+    {
+        SuccessOrExit(error = aRxInfo.mMessage.ReadFrameCounterTlvs(linkFrameCounter, mleFrameCounter));
+
+        SuccessOrExit(error = Tlv::Find<TimeoutTlv>(aRxInfo.mMessage, timeout));
+
+        switch (Tlv::Find<SupervisionIntervalTlv>(aRxInfo.mMessage, supervisionInterval))
+        {
+            case kErrorNone:
+                tlvList.Add(Tlv::kSupervisionInterval);
+                break;
+            case kErrorNotFound:
+                supervisionInterval = (version <= kThreadVersion1p3) ? kChildSupervisionDefaultIntervalForOlderVersion : 0;
+                break;
+            default:
+                ExitNow(error = kErrorParse);
+        }
+    }
 
     SuccessOrExit(error = aRxInfo.mMessage.ReadTlvRequestTlv(tlvList));
-
-    switch (Tlv::Find<SupervisionIntervalTlv>(aRxInfo.mMessage, supervisionInterval))
-    {
-    case kErrorNone:
-        tlvList.Add(Tlv::kSupervisionInterval);
-        break;
-    case kErrorNotFound:
-        supervisionInterval = (version <= kThreadVersion1p3) ? kChildSupervisionDefaultIntervalForOlderVersion : 0;
-        break;
-    default:
-        ExitNow(error = kErrorParse);
-    }
 
     switch (Tlv::Find<ActiveTimestampTlv>(aRxInfo.mMessage, timestamp))
     {
@@ -2053,6 +2156,10 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
 
     VerifyOrExit(tlvList.GetLength() <= Child::kMaxRequestTlvs, error = kErrorParse);
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    IgnoreError(Tlv::Find<RlocPrefixLengthTlv>(aRxInfo.mMessage, maxSubChildren));
+#endif
+
     if (!mode.IsFullThreadDevice())
     {
         SuccessOrExit(error = ProcessAddressRegistrationTlv(aRxInfo, *child));
@@ -2074,18 +2181,34 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
         RemoveNeighbor(*child);
     }
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (isSubChild)
+    {
+    }
+    else
+    {
+        child->SetDirectChild();
+#else
+    {
+#endif
+        child->GetLinkFrameCounters().SetAll(linkFrameCounter);
+        child->SetLinkAckFrameCounter(linkFrameCounter);
+        child->SetMleFrameCounter(mleFrameCounter);
+        child->SetKeySequence(aRxInfo.mKeySequence);
+        child->GetLinkInfo().AddRss(aRxInfo.mMessage.GetAverageRss());
+        child->SetSupervisionInterval(supervisionInterval);
+    }
     child->SetLastHeard(TimerMilli::GetNow());
-    child->GetLinkFrameCounters().SetAll(linkFrameCounter);
-    child->SetLinkAckFrameCounter(linkFrameCounter);
-    child->SetMleFrameCounter(mleFrameCounter);
-    child->SetKeySequence(aRxInfo.mKeySequence);
     child->SetDeviceMode(mode);
     child->SetVersion(version);
-    child->GetLinkInfo().AddRss(aRxInfo.mMessage.GetAverageRss());
     child->SetTimeout(timeout);
-    child->SetSupervisionInterval(supervisionInterval);
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     child->ClearLastRxFragmentTag();
+#endif
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    child->SetMaxSubChildren(maxSubChildren);
+    child->SetRloc16(0);
 #endif
 
     child->SetNetworkDataVersion(mLeaderData.GetDataVersion(mode.GetNetworkDataType()));
@@ -2138,8 +2261,60 @@ void MleRouter::HandleChildUpdateRequest(RxInfo &aRxInfo)
     TlvList         requestedTlvList;
     TlvList         tlvList;
     bool            childDidChange = false;
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    uint16_t        subChildRloc;
+    Mac::ExtAddress subChildExt;
+    bool            extPresent;
+    bool            isSubChild;
+#endif
 
     Log(kMessageReceive, kTypeChildUpdateRequestOfChild, aRxInfo.mMessageInfo.GetPeerAddr());
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    switch (aRxInfo.mMessage.ReadFromSubChildTlv(subChildRloc, subChildExt, extPresent))
+    {
+    case kErrorNone:
+        isSubChild = true;
+        break;
+
+    case kErrorParse:
+        ExitNow(error = kErrorParse);
+
+    default:
+        isSubChild = false;
+        break;
+    }
+
+    if (isSubChild)
+    {
+        if (extPresent)
+        {
+            child = mChildTable.FindChild(subChildExt, Child::kInStateValid);
+
+            if (Tlv::Find<TimeoutTlv>(aRxInfo.mMessage, timeout) == kErrorNone && timeout == 0)
+            {
+                Child *parent = Get<ChildTable>().FindChild(subChildRloc, Neighbor::kInStateValid);
+                if (child != nullptr)
+                {
+                    RemoveNeighbor(*child);
+                }
+                if (parent != nullptr)
+                {
+                    SendChildDetachResponse(*parent, subChildExt);
+                }
+                else
+                {
+                    LogWarn("Received SubChildDetach message from unknown neigbor %#06X", subChildRloc);
+                }
+                ExitNow();
+            }
+        }
+        else
+        {
+            child = mChildTable.FindChild(subChildRloc, Child::kInStateValid);
+        }
+    }
+#endif
 
     SuccessOrExit(error = aRxInfo.mMessage.ReadModeTlv(mode));
 
@@ -2157,8 +2332,13 @@ void MleRouter::HandleChildUpdateRequest(RxInfo &aRxInfo)
 
     tlvList.Add(Tlv::kSourceAddress);
 
-    aRxInfo.mMessageInfo.GetPeerAddr().GetIid().ConvertToExtAddress(extAddr);
-    child = mChildTable.FindChild(extAddr, Child::kInStateAnyExceptInvalid);
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (!isSubChild)
+#endif
+    {
+        aRxInfo.mMessageInfo.GetPeerAddr().GetIid().ConvertToExtAddress(extAddr);
+        child = mChildTable.FindChild(extAddr, Child::kInStateAnyExceptInvalid);
+    }
 
     if (child == nullptr)
     {
@@ -2778,23 +2958,7 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
 
     if ((aChild.GetRloc16() == 0) || !HasMatchingRouterIdWith(aChild.GetRloc16()))
     {
-        uint16_t rloc16;
-
-        // Pick next Child ID that is not being used
-        do
-        {
-            mNextChildId++;
-
-            if (mNextChildId > kMaxChildId)
-            {
-                mNextChildId = kMinChildId;
-            }
-
-            rloc16 = Get<Mac::Mac>().GetShortAddress() | mNextChildId;
-
-        } while (mChildTable.FindChild(rloc16, Child::kInStateAnyExceptInvalid) != nullptr);
-
-        aChild.SetRloc16(rloc16);
+        SuccessOrExit(error = GenerateChildRloc(aChild));
     }
 
     SuccessOrExit(error = message->AppendAddress16Tlv(aChild.GetRloc16()));
@@ -2833,12 +2997,23 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
         SuccessOrExit(error = message->AppendAddressRegistrationTlv(aChild));
     }
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (!aChild.IsDirectChild())
+    {
+        SuccessOrExit(error = message->AppendToSubChildTlv(aChild));
+    }
+#endif
+
     SetChildStateToValid(aChild);
 
     if (!aChild.IsRxOnWhenIdle())
     {
         Get<IndirectSender>().SetChildUseShortAddress(aChild, false);
     }
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    IgnoreError(Tlv::Append<RlocPrefixLengthTlv>(*message, aChild.GetRlocPrefixLength()));
+#endif
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     if (aChild.IsTimeSyncEnabled())
@@ -2847,7 +3022,12 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
     }
 #endif
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    destination.SetToLinkLocalAddress(aChild.GetNextHop().GetExtAddress());
+#else
     destination.SetToLinkLocalAddress(aChild.GetExtAddress());
+#endif
+
     SuccessOrExit(error = message->SendTo(destination));
 
     Log(kMessageSend, kTypeChildIdResponse, destination, aChild.GetRloc16());
@@ -3018,6 +3198,13 @@ void MleRouter::SendChildUpdateResponse(Child                  *aChild,
         }
     }
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (!aChild->IsDirectChild())
+    {
+        SuccessOrExit(error = message->AppendToSubChildTlv(*aChild));
+    }
+#endif
+
     SuccessOrExit(error = message->SendTo(aMessageInfo.GetPeerAddr()));
 
     if (aChild == nullptr)
@@ -3148,10 +3335,24 @@ void MleRouter::RemoveNeighbor(Neighbor &aNeighbor)
     {
         OT_ASSERT(mChildTable.Contains(aNeighbor));
 
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        uint16_t prefixLenght = static_cast<Child&>(aNeighbor).GetRlocPrefixLength();
+#endif
+
         if (aNeighbor.IsStateValidOrRestoring())
         {
             mNeighborTable.Signal(NeighborTable::kChildRemoved, aNeighbor);
         }
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        for (Child &child : Get<ChildTable>().Iterate(Neighbor::kInStateValid))
+        {
+            if (child.GetRlocPrefixLength() > prefixLenght && IsSubChildOf(child.GetRloc16(), aNeighbor.GetRloc16(), prefixLenght))
+            {
+                RemoveNeighbor(child);
+            }
+        }
+#endif
 
         Get<IndirectSender>().ClearAllMessagesForSleepyChild(static_cast<Child &>(aNeighbor));
 
@@ -3747,6 +3948,106 @@ bool MleRouter::NeighborHasComparableConnectivity(const RouteTlv &aRouteTlv, uin
 exit:
     return isComparable;
 }
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+Error MleRouter::GenerateChildRloc(ot::Child &aChild)
+{
+    Error error = kErrorNone;
+
+    uint16_t parentRloc16;
+    uint16_t rloc16;
+    uint16_t nextChildId = 0;
+    uint16_t maxChildId;
+    uint8_t  idOffset;
+
+    if (aChild.IsDirectChild())
+    {
+        parentRloc16 = Get<Mac::Mac>().GetShortAddress();
+
+        aChild.SetRlocPrefixLength(kRlocAddressSpaceTable[0]);
+        aChild.SetRlocAddressSpace(kRlocAddressSpaceTable[1]);
+
+        idOffset = 0;
+        maxChildId = (1u << kRlocAddressSpaceTable[0]) - 1u;
+    }
+    else
+    {
+        Child   *parent = aChild.GetSubChildParent();
+        uint16_t maxParentChildren;
+        uint8_t  depth;
+
+        VerifyOrExit(parent->IsStateValid(), error = kErrorInvalidState);
+        VerifyOrExit(parent->GetRlocAddressSpace() > 0, error = kErrorNotCapable);
+
+        maxParentChildren = parent->GetMaxSubChildren();
+        VerifyOrExit(maxParentChildren > 0, error = kErrorNotCapable);
+
+        maxChildId = (1u << parent->GetRlocAddressSpace()) - 1u;
+        if (maxChildId > maxParentChildren)
+        {
+            maxChildId = maxParentChildren;
+        }
+
+        parentRloc16 = parent->GetRloc16();
+
+        idOffset = parent->GetRlocPrefixLength();
+        aChild.SetRlocPrefixLength(parent->GetRlocPrefixLength() + parent->GetRlocAddressSpace());
+
+        depth = 2;
+        while ((parent = parent->GetSubChildParent()) != nullptr)
+        {
+            VerifyOrExit(parent->IsStateValid(), error = kErrorInvalidState);
+            depth++;
+        }
+
+        aChild.SetRlocAddressSpace(kRlocAddressSpaceTable[depth]);
+    }
+
+    // pick next Child ID that is not being used
+    do
+    {
+        nextChildId++;
+
+        if (nextChildId > maxChildId)
+        {
+            ExitNow(error = kErrorNoBufs);
+        }
+
+        rloc16 = parentRloc16 | (nextChildId << idOffset);
+
+    } while (mChildTable.FindChild(rloc16, Child::kInStateAnyExceptInvalid) != nullptr);
+
+    // allocate Child ID
+    aChild.SetRloc16(rloc16);
+
+exit:
+    return error;
+}
+#else
+Error MleRouter::GenerateChildRloc(ot::Child &aChild)
+{
+    uint16_t rloc16;
+
+    // pick next Child ID that is not being used
+    do
+    {
+        mNextChildId++;
+
+        if (mNextChildId > kMaxChildId)
+        {
+            mNextChildId = kMinChildId;
+        }
+
+        rloc16 = Get<Mac::Mac>().GetShortAddress() | mNextChildId;
+
+    } while (mChildTable.FindChild(rloc16, Child::kInStateAnyExceptInvalid) != nullptr);
+
+    // allocate Child ID
+    aChild.SetRloc16(rloc16);
+
+    return kErrorNone;
+}
+#endif
 
 void MleRouter::SetChildStateToValid(Child &aChild)
 {

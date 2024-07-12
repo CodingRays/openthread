@@ -32,8 +32,9 @@
  */
 
 #include "child_table.hpp"
+#include "thread/mle_types.hpp"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/code_utils.hpp"
 #include "common/locator_getters.hpp"
@@ -90,6 +91,19 @@ void ChildTable::Clear(void)
     {
         child.Clear();
     }
+}
+
+Error ChildTable::GetNeighborIndex(const ot::Neighbor &aNeighbor, uint16_t &aIndex) const
+{
+    Error     error = kErrorNone;
+    ptrdiff_t diff = static_cast<const Child*>(&aNeighbor) - mChildren;
+
+    VerifyOrExit(diff >= 0 && diff < kMaxChildren, error = kErrorFailed);
+
+    aIndex = static_cast<uint16_t>(diff);
+
+exit:
+    return error;
 }
 
 Child *ChildTable::GetChildAtIndex(uint16_t aChildIndex)
@@ -216,6 +230,7 @@ exit:
     return error;
 }
 
+#if OPENTHREAD_FTD
 void ChildTable::Restore(void)
 {
     Error    error          = kErrorNone;
@@ -281,18 +296,27 @@ void ChildTable::RemoveStoredChild(const Child &aChild)
 
 Error ChildTable::StoreChild(const Child &aChild)
 {
+    Error               error = kErrorNone;
     Settings::ChildInfo childInfo;
 
     RemoveStoredChild(aChild);
 
-    childInfo.Init();
-    childInfo.SetExtAddress(aChild.GetExtAddress());
-    childInfo.SetTimeout(aChild.GetTimeout());
-    childInfo.SetRloc16(aChild.GetRloc16());
-    childInfo.SetMode(aChild.GetDeviceMode().Get());
-    childInfo.SetVersion(aChild.GetVersion());
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    // We cant reattach to sub children so we dont store them to nonvolatile
+    if (aChild.IsDirectChild())
+#endif
+    {
+        childInfo.Init();
+        childInfo.SetExtAddress(aChild.GetExtAddress());
+        childInfo.SetTimeout(aChild.GetTimeout());
+        childInfo.SetRloc16(aChild.GetRloc16());
+        childInfo.SetMode(aChild.GetDeviceMode().Get());
+        childInfo.SetVersion(aChild.GetVersion());
 
-    return Get<Settings>().AddChildInfo(childInfo);
+        error = Get<Settings>().AddChildInfo(childInfo);
+    }
+
+    return error;
 }
 
 void ChildTable::RefreshStoredChildren(void)
@@ -347,7 +371,8 @@ bool ChildTable::HasSleepyChildWithAddress(const Ip6::Address &aIp6Address) cons
 
     return hasChild;
 }
+#endif // OPENTHREAD_FTD
 
 } // namespace ot
 
-#endif // OPENTHREAD_FTD
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)

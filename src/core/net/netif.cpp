@@ -34,6 +34,7 @@
 #include "netif.hpp"
 
 #include "common/as_core_type.hpp"
+#include "common/const_cast.hpp"
 #include "common/debug.hpp"
 #include "common/locator_getters.hpp"
 #include "common/message.hpp"
@@ -79,6 +80,11 @@ const otNetifMulticastAddress Netif::kRealmLocalAllRoutersMulticastAddress = {
 const otNetifMulticastAddress Netif::kLinkLocalAllRoutersMulticastAddress = {
     {{{0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}}},
     &Netif::kRealmLocalAllRoutersMulticastAddress};
+
+// "ff02::03"
+const otNetifMulticastAddress Netif::kLinkLocalAllSubChildrenMulticastAddress = {
+    {{{0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}}},
+    &Netif::kLinkLocalAllNodesMulticastAddress};
 
 //---------------------------------------------------------------------------------------------------------------------
 // Netif
@@ -166,11 +172,13 @@ void Netif::SubscribeAllRoutersMulticast(void)
     MulticastAddress &linkLocalAllRoutersAddress  = AsCoreType(&AsNonConst(kLinkLocalAllRoutersMulticastAddress));
     MulticastAddress &linkLocalAllNodesAddress    = AsCoreType(&AsNonConst(kLinkLocalAllNodesMulticastAddress));
     MulticastAddress &realmLocalAllRoutersAddress = AsCoreType(&AsNonConst(kRealmLocalAllRoutersMulticastAddress));
+    MulticastAddress &linkLocalAllSubChildrenAddress = AsCoreType(&AsNonConst(kLinkLocalAllSubChildrenMulticastAddress));
 
     // This method MUST be called after `SubscribeAllNodesMulticast()`
     // Ensure that the `LinkLocalAll` was found on the list.
 
     SuccessOrAssert(mMulticastAddresses.Find(linkLocalAllNodesAddress, prev));
+    OT_ASSERT(prev != &linkLocalAllSubChildrenAddress);
 
     // The tail of multicast address linked list contains the
     // fixed addresses. We either have a chain of five addresses
@@ -231,6 +239,56 @@ void Netif::UnsubscribeAllRoutersMulticast(void)
     }
 
     SignalMulticastAddressesChange(kAddressRemoved, &linkLocalAllRoutersAddress, &linkLocalAllNodesAddress);
+
+exit:
+    return;
+}
+
+void Netif::SubscribeAllSubChildrenMulticast(void)
+{
+    MulticastAddress *prev;
+    MulticastAddress &linkLocalAllSubChildrenAddress = AsCoreType(&AsNonConst(kLinkLocalAllSubChildrenMulticastAddress));
+    MulticastAddress &linkLocalAllNodesAddress       = AsCoreType(&AsNonConst(kLinkLocalAllNodesMulticastAddress));
+    MulticastAddress &realmLocalAllRoutersAddress    = AsCoreType(&AsNonConst(kRealmLocalAllRoutersMulticastAddress));
+
+    SuccessOrAssert(mMulticastAddresses.Find(linkLocalAllNodesAddress, prev));
+    OT_ASSERT(prev != &realmLocalAllRoutersAddress);
+
+    VerifyOrExit(prev != &linkLocalAllSubChildrenAddress);
+
+    if (prev == nullptr)
+    {
+        mMulticastAddresses.SetHead(&linkLocalAllSubChildrenAddress);
+    }
+    else
+    {
+        prev->SetNext(&linkLocalAllSubChildrenAddress);
+    }
+
+    SignalMulticastAddressesChange(kAddressAdded, &linkLocalAllSubChildrenAddress, &linkLocalAllNodesAddress);
+
+exit:
+    return;
+}
+
+void Netif::UnsubscribeAllSubChildrenMulticast(void)
+{
+    MulticastAddress *prev;
+    MulticastAddress &linkLocalAllSubChildrenAddress = AsCoreType(&AsNonConst(kLinkLocalAllSubChildrenMulticastAddress));
+    MulticastAddress &linkLocalAllNodesAddress       = AsCoreType(&AsNonConst(kLinkLocalAllNodesMulticastAddress));
+
+    SuccessOrExit(mMulticastAddresses.Find(linkLocalAllSubChildrenAddress, prev));
+
+    if (prev == nullptr)
+    {
+        mMulticastAddresses.SetHead(&linkLocalAllNodesAddress);
+    }
+    else
+    {
+        prev->SetNext(&linkLocalAllNodesAddress);
+    }
+
+    SignalMulticastAddressesChange(kAddressRemoved, &linkLocalAllSubChildrenAddress, &linkLocalAllNodesAddress);
 
 exit:
     return;

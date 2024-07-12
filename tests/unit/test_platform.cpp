@@ -424,10 +424,23 @@ OT_TOOL_WEAK uint16_t otPlatTimeGetXtalAccuracy(void) { return 0; }
 #endif
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-OT_TOOL_WEAK otError otPlatRadioEnableCsl(otInstance *, uint32_t, otShortAddress, const otExtAddress *)
+OT_TOOL_WEAK otError otPlatRadioEnableCsl(otInstance *, uint32_t)
 {
     return OT_ERROR_NONE;
 }
+
+OT_TOOL_WEAK otError otPlatRadioAddCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioAddCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioClearCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioClearCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioClearCslShortEntries(otInstance *aInstance) { return OT_ERROR_NONE; }
+
+OT_TOOL_WEAK otError otPlatRadioClearCslExtEntries(otInstance *aInstance) { return OT_ERROR_NONE; }
+
 
 OT_TOOL_WEAK otError otPlatRadioResetCsl(otInstance *) { return OT_ERROR_NONE; }
 

@@ -40,6 +40,7 @@
 #include "common/message.hpp"
 #include "common/preference.hpp"
 #include "common/tlvs.hpp"
+#include "mac/mac_types.hpp"
 #include "meshcop/timestamp.hpp"
 #include "net/ip6_address.hpp"
 #include "thread/link_metrics_tlvs.hpp"
@@ -108,6 +109,11 @@ public:
         kLinkMetricsManagement = 88, ///< Link Metrics Management TLV
         kLinkMetricsReport     = 89, ///< Link Metrics Report TLV
         kLinkProbe             = 90, ///< Link Probe TLV
+
+        kSubChildLink          = 200,
+        kRlocPrefixLength      = 201,
+        kFromSubChild          = 202,
+        kToSubChild            = 203,
 
         /**
          * Applicable/Required only when time synchronization service
@@ -246,6 +252,18 @@ typedef UintTlvInfo<Tlv::kCslTimeout, uint32_t> CslTimeoutTlv;
  *
  */
 typedef UintTlvInfo<Tlv::kXtalAccuracy, uint16_t> XtalAccuracyTlv;
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+/**
+ * Defines Rloc Prefix Length TLV constants and types.
+ *
+ */
+typedef UintTlvInfo<Tlv::kRlocPrefixLength, uint8_t> RlocPrefixLengthTlv;
+
+typedef TlvInfo<Tlv::kFromSubChild> FromSubChildTlv;
+
+typedef TlvInfo<Tlv::kToSubChild> ToSubChildTlv;
+#endif
 
 #if !OPENTHREAD_CONFIG_MLE_LONG_ROUTES_ENABLE
 
@@ -706,6 +724,7 @@ class ScanMaskTlv : public UintTlvInfo<Tlv::kScanMask, uint8_t>
 public:
     static constexpr uint8_t kRouterFlag    = 1 << 7; ///< Scan Mask Router Flag.
     static constexpr uint8_t kEndDeviceFlag = 1 << 6; ///< Scan Mask End Device Flag.
+    static constexpr uint8_t kSubChildFlag  = 1 << 5; ///< Scan Mask Sub Child Flag.
 
     /**
      * Indicates whether or not the Router flag is set.
@@ -726,6 +745,16 @@ public:
      * @retval FALSE  If the End Device flag is not set.
      */
     static bool IsEndDeviceFlagSet(uint8_t aMask) { return (aMask & kEndDeviceFlag) != 0; }
+
+    /**
+     * Indicates wheter or not the Sub Child flag is set.
+     *
+     * @param[in] aMask   A scan mask value.
+     *
+     * @retval TRUE   If the Sub Child flag is set.
+     * @retval FALSE  If the Sub Child flags is not set.
+     */
+    static bool IsSubChildFlagSet(uint8_t aMask) { return (aMask & kSubChildFlag) != 0; }
 };
 
 /**
@@ -1278,6 +1307,100 @@ private:
 } OT_TOOL_PACKED_END;
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+OT_TOOL_PACKED_BEGIN
+class SubChildLinkTlv : public Tlv, public TlvInfo<Tlv::kSubChildLink>
+{
+public:
+    /**
+     * Initializes the TLV.
+     *
+     */
+    void Init(void)
+    {
+        SetType(kSubChildLink);
+        SetLength(sizeof(*this) - sizeof(Tlv));
+        mCslRoundTripTimeRadioChannel = 0;
+    }
+
+    /**
+     * Returns the CSL Round Trip Time value.
+     *
+     * @return The CSL Round Trip Time value.
+     *
+     */
+    uint32_t GetCslRoundTripTime(void) const { return BigEndian::HostSwap32(mCslRoundTripTimeRadioChannel) & static_cast<uint32_t>(0x00ffffffUL); }
+
+    /**
+     * Sets the CSL Round Trip Time value.
+     *
+     * @param[in] aCslRoundTripTime  The CSL Roun Trip Time value.
+     *
+     */
+    void SetCslRoundTripTime(uint32_t aCslRoundTripTime) { SetCslRoundTripTimeRadioChannel(aCslRoundTripTime, GetRadioChannel()); }
+
+    uint8_t GetRadioChannel(void) const { return (BigEndian::HostSwap32(mCslRoundTripTimeRadioChannel) & static_cast<uint32_t>(0xff000000UL)) >> 24; }
+
+    void SetRadioChannel(uint8_t aRadioChannel) { SetCslRoundTripTimeRadioChannel(GetCslRoundTripTime(), aRadioChannel); }
+
+    /**
+     * Returns the Hop Count value.
+     *
+     * @return The Hop Count value.
+     *
+     */
+    uint8_t GetHopCount(void) const { return mHopCount; }
+
+    /**
+     * Sets the Hop Count value.
+     *
+     * @param[in] aHopCount  The Hop Count value.
+     *
+     */
+    void SetHopCount(uint8_t aHopCount) { mHopCount = aHopCount; }
+
+    /**
+     * Returns the Rate Limit value.
+     *
+     * @return The Rate Limit value.
+     *
+     */
+    uint8_t GetRateLimit(void) const { return mRateLimit; }
+
+    /**
+     * Sets the Rate Limit value.
+     *
+     * @param[in] aRateLimit  The Rate Limit value.
+     *
+     */
+    void SetRateLimit(uint8_t aRateLimit) { mRateLimit = aRateLimit; }
+
+private:
+    void SetCslRoundTripTimeRadioChannel(uint32_t aCslRoundTripTime, uint8_t aRadioChannel) { mCslRoundTripTimeRadioChannel = BigEndian::HostSwap32((aCslRoundTripTime & static_cast<uint32_t>(0x00ffffffUL)) | (static_cast<uint32_t>(aRadioChannel) << 24)); }
+
+    uint32_t mCslRoundTripTimeRadioChannel;
+    uint8_t  mHopCount;
+    uint8_t  mRateLimit;
+} OT_TOOL_PACKED_END;
+
+OT_TOOL_PACKED_BEGIN
+class FullSubChildInfo
+{
+public:
+    uint16_t GetRloc16(void) const { return BigEndian::HostSwap16(mRloc16); }
+
+    void SetRloc16(uint16_t aRloc16) { mRloc16 = BigEndian::HostSwap16(aRloc16); }
+
+    const Mac::ExtAddress& GetExtAddress(void) const { return mExtAddress; }
+
+    void SetExtAddress(const Mac::ExtAddress &aExtAddress) { mExtAddress = aExtAddress; }
+
+private:
+    uint16_t        mRloc16;
+    Mac::ExtAddress mExtAddress;
+} OT_TOOL_PACKED_END;
+#endif // OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE 
 /**
  * @}
  *

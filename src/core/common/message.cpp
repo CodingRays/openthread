@@ -341,6 +341,12 @@ bool Message::IsSubTypeMle(void) const
     case kSubTypeMleChildUpdateRequest:
     case kSubTypeMleDataResponse:
     case kSubTypeMleChildIdRequest:
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    case kSubTypeMleSubChildParentRequest:
+    case kSubTypeMleSubChildParentResponse:
+    case kSubTypeMleSubChildLinkRequest:
+    case kSubTypeMleSubChildIdRequest:
+#endif
         rval = true;
         break;
 
@@ -815,14 +821,104 @@ exit:
     return messageCopy;
 }
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 bool Message::GetChildMask(uint16_t aChildIndex) const { return GetMetadata().mChildMask.Get(aChildIndex); }
 
 void Message::ClearChildMask(uint16_t aChildIndex) { GetMetadata().mChildMask.Set(aChildIndex, false); }
 
 void Message::SetChildMask(uint16_t aChildIndex) { GetMetadata().mChildMask.Set(aChildIndex, true); }
 
-bool Message::IsChildPending(void) const { return GetMetadata().mChildMask.HasAny(); }
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+bool Message::GetParentPending(void) const { return GetMetadata().mToParent; }
+
+void Message::SetParentPending(void) { GetMetadata().mToParent = true; }
+
+void Message::ClearParentPending(void) { GetMetadata().mToParent = false; }
+
+bool Message::GetParentCandidatePending(void) const { return GetMetadata().mToParentCandidate; }
+
+void Message::SetParentCandidatePending(void) { GetMetadata().mToParentCandidate = true; }
+
+void Message::ClearParentCandidatePending(void) { GetMetadata().mToParentCandidate = false; }
+#endif
+
+bool Message::IsForNeighbor(const IndirectReachable &aNeighbor) const
+{
+    bool     retval;
+    uint16_t childIndex;
+
+    if (Get<ChildTable>().GetNeighborIndex(aNeighbor, childIndex) == kErrorNone)
+    {
+        retval = GetChildMask(childIndex);
+    }
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    else if (Get<Mle::Mle>().IsParent(aNeighbor))
+    {
+        retval = GetParentPending();
+    }
+    else if (Get<Mle::Mle>().IsParentCandidate(aNeighbor))
+    {
+        retval = GetParentCandidatePending();
+    }
+#endif
+    else
+    {
+        retval = false;
+    }
+
+    return retval;
+}
+
+void Message::SetForNeighbor(const IndirectReachable &aNeighbor)
+{
+    uint16_t childIndex;
+
+    if (Get<ChildTable>().GetNeighborIndex(aNeighbor, childIndex) == kErrorNone)
+    {
+        SetChildMask(childIndex);
+    }
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    else if (Get<Mle::Mle>().IsParent(aNeighbor))
+    {
+        SetParentPending();
+    }
+    else if (Get<Mle::Mle>().IsParentCandidate(aNeighbor))
+    {
+        SetParentCandidatePending();
+    }
+#endif
+}
+
+void Message::ClearForNeighbor(const ot::IndirectReachable &aNeighbor)
+{
+    uint16_t childIndex;
+
+    if (Get<ChildTable>().GetNeighborIndex(aNeighbor, childIndex) == kErrorNone)
+    {
+        ClearChildMask(childIndex);
+    }
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    else if (Get<Mle::Mle>().IsParent(aNeighbor))
+    {
+        ClearParentPending();
+    }
+    else if (Get<Mle::Mle>().IsParentCandidate(aNeighbor))
+    {
+        ClearParentCandidatePending();
+    }
+#endif
+}
+
+bool Message::IsTxPending(void) const
+{
+    bool pending = GetMetadata().mChildMask.HasAny();
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    pending = pending || GetMetadata().mToParent || GetMetadata().mToParentCandidate;
+#endif
+
+    return pending;
+}
 #endif
 
 Error Message::GetLinkInfo(ThreadLinkInfo &aLinkInfo) const

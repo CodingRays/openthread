@@ -85,6 +85,10 @@ constexpr uint8_t  kInvalidRouterId = kMaxRouterId + 1;                   ///< V
 constexpr uint8_t  kRouterIdOffset  = 10;                                 ///< Bit offset of router ID in RLOC16
 constexpr uint16_t kInvalidRloc16   = Mac::kShortAddrInvalid;             ///< Invalid RLOC16.
 
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+constexpr uint8_t kRlocAddressSpaceTable[] = { 4, 3, 2, 0 }; ///< The RLOC address space provided to a node at specified distance. Index 0 is for the router. Need the extra 0 at the end for allocation logic
+#endif
+
 #if OPENTHREAD_CONFIG_MLE_LONG_ROUTES_ENABLE
 constexpr uint8_t kMaxRouteCost = 127; ///< Maximum path cost
 #else
@@ -589,6 +593,14 @@ typedef Mac::Key Key;
  *
  */
 typedef otMleCounters Counters;
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+inline bool IsSubChildOf(uint16_t aRlocA, uint16_t aRlocB, uint8_t aPrefixLength)
+{
+    uint16_t mask = (1u << aPrefixLength) - 1u;
+    return (aRlocA & mask) == (aRlocB & mask);
+}
+#endif
 
 /**
  * Derives the Child ID from a given RLOC16.

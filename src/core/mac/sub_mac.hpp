@@ -45,6 +45,7 @@
 #include "common/non_copyable.hpp"
 #include "common/timer.hpp"
 #include "mac/mac_frame.hpp"
+#include "mac/mac_types.hpp"
 #include "radio/radio.hpp"
 
 namespace ot {
@@ -65,21 +66,21 @@ namespace Mac {
 #error "Thread 1.2 or higher version is required for OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE."
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION < OT_THREAD_VERSION_1_2)
-#error "Thread 1.2 or higher version is required for OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE."
+#error "Thread 1.2 or higher version is required for (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE."
 #endif
 
 #if !OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
 #error "Microsecond timer OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE is required for "\
-    "OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE"
+    "(OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE"
 #endif
 
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE && !OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-#error "OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE is required for OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE."
+#if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE && !(OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#error "(OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE is required for OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE."
 #endif
 
 #if OPENTHREAD_RADIO || OPENTHREAD_CONFIG_LINK_RAW_ENABLE
@@ -109,6 +110,25 @@ class SubMac : public InstanceLocator, private NonCopyable
     friend class LinkRaw;
 
 public:
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    class CslInfo {
+    public:
+        void Init() { mCslAccuracy.Init(); mCslLastSync.SetValue(0); }
+
+        TimeMicro GetCslLastSync(void) const { return mCslLastSync; }
+
+        void SetCslLastSync(TimeMicro aCslLastSync) { mCslLastSync = aCslLastSync; }
+
+        const CslAccuracy& GetCslAccuracy(void) const { return mCslAccuracy; }
+
+        void SetCslAccuracy(CslAccuracy& aCslAccuracy) { mCslAccuracy = aCslAccuracy; }
+
+    private:
+        TimeMicro   mCslLastSync;
+        CslAccuracy mCslAccuracy;
+    };
+#endif
+
     /**
      * Defines the callbacks notifying `SubMac` user of changes and events.
      *
@@ -391,7 +411,7 @@ public:
      */
     int8_t GetNoiseFloor(void) const;
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     /**
      * Configures CSL parameters in 'SubMac'.
      *
@@ -406,6 +426,8 @@ public:
      */
     bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
 
+    void UpdateCslNeighbors(void);
+
     /**
      * Lets `SubMac` start CSL sample mode given a configured non-zero CSL period.
      *
@@ -414,23 +436,7 @@ public:
      */
     void CslSample(void);
 
-    /**
-     * Returns parent CSL accuracy (clock accuracy and uncertainty).
-     *
-     * @returns The parent CSL accuracy.
-     *
-     */
-    const CslAccuracy &GetCslParentAccuracy(void) const { return mCslParentAccuracy; }
-
-    /**
-     * Sets parent CSL accuracy.
-     *
-     * @param[in] aCslAccuracy  The parent CSL accuracy.
-     *
-     */
-    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy) { mCslParentAccuracy = aCslAccuracy; }
-
-#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#endif // (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
     /**
      * Sets MAC keys and key index.
@@ -524,17 +530,47 @@ public:
     bool IsRadioFilterEnabled(void) const { return mRadioFilterEnabled; }
 #endif
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    /**
+     * Enables/disables periodic listening on the wakeup channel.
+     *
+     * @param[in] aWakeupListenEnabled    TRUE to enable wakeup listening, FALSE to disable.
+     *
+     */
+    void SetWakeupListenEnabled(bool aWakeupListenEnabled);
+
+    void SetWakeupListenChannel(uint8_t aChannel) { mWakeupListenChannel = aChannel; }
+
+    uint8_t GetWakeupListenChannel(void) const { return mWakeupListenChannel; }
+
+    /**
+     * Set the interval between wakeup listen windows.
+     *
+     * @param[in] aInterval    The wakeup listen interval in units of 2560 symbols.
+     *
+     */
+    void SetWakeupListenPeriod(uint8_t aPeriod) { mWakeupListenPeriod = aPeriod; }
+
+    uint8_t GetWakeupListenPeriod(void) const { return mWakeupListenPeriod; }
+#endif
+
 private:
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     void        CslInit(void);
     void        UpdateCslLastSyncTimestamp(TxFrame &aFrame, RxFrame *aAckFrame);
     void        UpdateCslLastSyncTimestamp(RxFrame *aFrame, Error aError);
     static void HandleCslTimer(Timer &aTimer);
     void        HandleCslTimer(void);
+    TimeMicro   HandleCslWindowBegin(uint32_t aTimeAhead, uint32_t aTimeAfter);
+    TimeMicro   ScheduleNextCslEvent(uint32_t aTimeAhead, TimeMicro aBusyUntil);
     void        GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter);
+    uint32_t    GetCslNeighborSemiWindow(CslInfo &aNeighbor, uint32_t aTime);
 #if OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
     void LogReceived(RxFrame *aFrame);
 #endif
+#endif
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    TimeMicro HandleWakeupListenWindowBegin(uint32_t aTimeAhead);
 #endif
 
     static constexpr uint8_t  kCsmaMinBe         = 3;   // macMinBE (IEEE 802.15.4-2006).
@@ -568,12 +604,24 @@ private:
 #if !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
         kStateCslTransmit, // CSL transmission.
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         kStateCslSample, // CSL receive.
 #endif
     };
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    enum CslState : uint8_t
+    {
+        kCslStateCslQueued,
+        kCslStateCslReceive,
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kCslStateWakeupQueued,
+        kCslStateWakeupReceive,
+#endif
+    };
+#endif
+
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     // Radio on times needed before and after MHR time for proper frame detection
     static constexpr uint32_t kMinReceiveOnAhead = OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AHEAD;
     static constexpr uint32_t kMinReceiveOnAfter = OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AFTER;
@@ -588,6 +636,10 @@ private:
     // than expected delayed transmit time. The value is in usec.
     // Only for radios not supporting OT_RADIO_CAPS_TRANSMIT_TIMING.
     static constexpr uint32_t kCslTransmitTimeAhead = OPENTHREAD_CONFIG_CSL_TRANSMIT_TIME_AHEAD;
+#endif
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    static constexpr uint32_t kWakeupListenLength = 5000;
 #endif
 
     /**
@@ -666,16 +718,22 @@ private:
 #endif
     SubMacTimer mTimer;
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     uint16_t mCslPeriod;      // The CSL sample period, in units of 10 symbols (160 microseconds).
-    uint8_t  mCslChannel : 7; // The CSL sample channel.
-    bool mIsCslSampling : 1;  // Indicates that the radio is receiving in CSL state for platforms not supporting delayed
-                              // reception.
+    uint8_t  mCslChannel : 6; // The CSL sample channel.
+    CslState mCslState   : 2; // The current CSL state.
+
     uint16_t    mCslPeerShort;      // The CSL peer short address.
     TimeMicro   mCslSampleTime;     // The CSL sample time of the current period relative to the local radio clock.
-    TimeMicro   mCslLastSync;       // The timestamp of the last successful CSL synchronization.
-    CslAccuracy mCslParentAccuracy; // The parent's CSL accuracy (clock accuracy and uncertainty).
     TimerMicro  mCslTimer;
+#endif
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool    mWakeupListenEnabled : 1;
+    uint8_t mWakeupListenPeriod;
+    uint8_t mWakeupListenChannel : 7;
+
+    TimeMicro  mWakeupListenTime;  // The start of the next wakeup listen window
 #endif
 };
 

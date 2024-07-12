@@ -58,14 +58,15 @@ SubMac::SubMac(Instance &aInstance)
     , mTransmitFrame(Get<Radio>().GetTransmitBuffer())
     , mCallbacks(aInstance)
     , mTimer(aInstance)
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     , mCslTimer(aInstance, SubMac::HandleCslTimer)
 #endif
-{
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    mCslParentAccuracy.Init();
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    , mWakeupListenEnabled(false)
+    , mWakeupListenPeriod(127)
+    , mWakeupListenChannel(15)
 #endif
-
+{
     Init();
 }
 
@@ -95,7 +96,7 @@ void SubMac::Init(void)
     mKeyId        = 0;
     mTimer.Stop();
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     CslInit();
 #endif
 }
@@ -208,7 +209,7 @@ Error SubMac::Disable(void)
 {
     Error error;
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     mCslTimer.Stop();
 #endif
 
@@ -281,7 +282,7 @@ void SubMac::HandleReceiveDone(RxFrame *aFrame, Error aError)
         SignalFrameCounterUsed(aFrame->mInfo.mRxInfo.mAckFrameCounter, aFrame->mInfo.mRxInfo.mAckKeyId);
     }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     UpdateCslLastSyncTimestamp(aFrame, aError);
 #endif
 
@@ -310,7 +311,7 @@ Error SubMac::Send(void)
 #endif
     case kStateSleep:
     case kStateReceive:
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     case kStateCslSample:
 #endif
         break;
@@ -538,7 +539,7 @@ void SubMac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aErro
         {
             mCallbacks.RecordCcaStatus(ccaSuccess, aFrame.GetChannel());
         }
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         UpdateCslLastSyncTimestamp(aFrame, aAckFrame);
 #endif
         break;
@@ -684,7 +685,7 @@ Error SubMac::EnergyScan(uint8_t aScanChannel, uint16_t aScanDuration)
 
     case kStateReceive:
     case kStateSleep:
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     case kStateCslSample:
 #endif
         break;
@@ -978,6 +979,13 @@ exit:
     return;
 }
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+void SubMac::SetWakeupListenEnabled(bool aWakeupListenEnabled)
+{
+    mWakeupListenEnabled = aWakeupListenEnabled;
+}
+#endif
+
 // LCOV_EXCL_START
 
 const char *SubMac::StateToString(State aState)
@@ -995,7 +1003,7 @@ const char *SubMac::StateToString(State aState)
 #if !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
         "CslTransmit", // (7) kStateCslTransmit
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         "CslSample", // (8) kStateCslSample
 #endif
     };
@@ -1011,19 +1019,19 @@ const char *SubMac::StateToString(State aState)
     static_assert(kStateDelayBeforeRetx == 6, "kStateDelayBeforeRetx value is not correct");
 #if !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     static_assert(kStateCslTransmit == 7, "kStateCslTransmit value is not correct");
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 8, "kStateCslSample value is not correct");
 #endif
-#elif OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#elif (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 7, "kStateCslSample value is not correct");
 #endif
 
 #elif !OPENTHREAD_MTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     static_assert(kStateCslTransmit == 6, "kStateCslTransmit value is not correct");
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 7, "kStateCslSample value is not correct");
 #endif
-#elif OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#elif (OPENTHREAD_FTD || OPENTHREAD_MTD) && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     static_assert(kStateCslSample == 6, "kStateCslSample value is not correct");
 #endif
 

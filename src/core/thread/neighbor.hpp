@@ -37,6 +37,7 @@
 #include "openthread-core-config.h"
 
 #include <openthread/thread_ftd.h>
+#include <openthread/thread_mtd.h>
 
 #include "common/as_core_type.hpp"
 #include "common/clearable.hpp"
@@ -93,6 +94,14 @@ public:
         kStateLinkRequest,        ///< Sent an MLE Link Request message
         kStateChildUpdateRequest, ///< Sent an MLE Child Update Request message (trying to restore the child)
         kStateValid,              ///< Link is valid
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE 
+        kStateSubChildParentRequest,  ///< A parent request with the sub child bit set was sent
+        kStateSubChildParentResponse, ///< A parent response was sent
+        kStateSubChildLinkRequest,    ///< A link request message was sent
+        kStateSubChildLinkAccept,     ///< A link accept message was sent
+        kStateSubChildIdRequest,      ///< A child id request was sent
+        kStateDetachPending,          ///< A detach message to the ftd parent for this child has not yet been acked.
+#endif
     };
 
     /**
@@ -111,6 +120,10 @@ public:
         kInStateAnyExceptInvalid,          ///< Accept neighbor in any state except `kStateInvalid`.
         kInStateAnyExceptValidOrRestoring, ///< Accept neighbor in any state except `IsStateValidOrRestoring()`.
         kInStateAny,                       ///< Accept neighbor in any state.
+        kInStateWithSecurityReady,         ///< Accept any state where link security is ready.
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        kInStateDetachPending,             ///< Detach pending
+#endif
     };
 
     /**
@@ -302,6 +315,18 @@ public:
      *
      */
     bool IsStateValidOrAttaching(void) const;
+
+    /**
+     * Indicates if the neighbor is in any state where link layer security is ready.
+     *
+     * @returns TRUE if the neighbor is in a state where link layer security is ready.
+     *
+     */
+    bool IsStateWithSecurityReady(void) const;
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool IsStateDetachPending(void) const { return mState == kStateDetachPending; }
+#endif
 
     /**
      * Indicates whether neighbor state matches a given state filter.
@@ -821,7 +846,11 @@ private:
 
     uint32_t mKeySequence; ///< Current key sequence
     uint16_t mRloc16;      ///< The RLOC16
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    uint8_t  mState : 5;   ///< The link state
+#else
     uint8_t  mState : 4;   ///< The link state
+#endif
     uint8_t  mMode : 4;    ///< The MLE device mode
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     uint8_t mLinkFailures : 7;    ///< Consecutive link failure count
@@ -848,6 +877,71 @@ private:
 };
 
 DefineCoreType(otNeighborInfo, Neighbor::Info);
+
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
+/**
+ * Represents a Neighbor that might be reachable over an indirect link. Either data poll or CSL.
+ *
+ */
+class IndirectReachable : public Neighbor
+                        , public IndirectSender::ChildInfo
+                        , public DataPollHandler::ChildInfo
+#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+                        , public CslTxScheduler::ChildInfo
+#endif
+{
+public:
+    /**
+     * Returns the supervision interval (in seconds).
+     *
+     * @returns The supervision interval (in seconds).
+     *
+     */
+    uint16_t GetSupervisionInterval(void) const { return mSupervisionInterval; }
+
+    /**
+     * Sets the supervision interval.
+     *
+     * @param[in] aInterval  The supervision interval (in seconds).
+     *
+     */
+    void SetSupervisionInterval(uint16_t aInterval) { mSupervisionInterval = aInterval; }
+
+    /**
+     * Increments the number of seconds since last supervision of the child.
+     *
+     */
+    void IncrementSecondsSinceLastSupervision(void) { mSecondsSinceSupervision++; }
+
+    /**
+     * Returns the number of seconds since last supervision of the child (last message to the child)
+     *
+     * @returns Number of seconds since last supervision of the child.
+     *
+     */
+    uint16_t GetSecondsSinceLastSupervision(void) const { return mSecondsSinceSupervision; }
+
+    /**
+     * Resets the number of seconds since last supervision of the child to zero.
+     *
+     */
+    void ResetSecondsSinceLastSupervision(void) { mSecondsSinceSupervision = 0; }
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool GetUpdatePending(void) const { return mUpdatePending; }
+
+    void SetUpdatePending(bool aUpdatePending) { mUpdatePending = aUpdatePending; }
+#endif
+
+private:
+    uint16_t mSupervisionInterval;     // Supervision interval for the child (in sec).
+    uint16_t mSecondsSinceSupervision; // Number of seconds since last supervision of the child.
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool mUpdatePending; ///< If true a child update message needs to be sent to this neighbor
+#endif
+};
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 } // namespace ot
 
