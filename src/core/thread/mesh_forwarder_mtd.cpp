@@ -32,26 +32,124 @@
  */
 
 #include "mesh_forwarder.hpp"
+#include "common/message.hpp"
 
 #if OPENTHREAD_MTD
 
+#include "common/locator_getters.hpp"
+#include "common/log.hpp"
+
 namespace ot {
+
+RegisterLogModule("Mle");
 
 void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
 {
     Message &message = *aMessagePtr.Release();
 
-    message.SetDirectTransmission();
     message.SetOffset(0);
     message.SetDatagramTag(0);
     message.SetTimestampToNow();
-
     mSendQueue.Enqueue(message);
-    mScheduleTransmissionTask.Post();
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    switch (message.GetType())
+    {
+    case Message::kTypeIp6:
+    {
+        Ip6::Header  ip6Header;
+        bool         childFound = false;
+
+        IgnoreError(message.Read(0, ip6Header));
+
+        if (message.GetSubType() == Message::kSubTypeMleAnnounce || message.GetSubType() == Message::kSubTypeMleDiscoverRequest)
+        {
+            message.SetDirectTransmission();
+            childFound = true;
+        }
+        else if (message.IsDirectTransmission())
+        {
+            childFound = true;
+        }
+        else if (Get<Mle::Mle>().IsRoutingLocator(ip6Header.GetDestination()))
+        {
+            uint16_t rloc = ip6Header.GetDestination().GetIid().GetLocator();
+
+            for (Child &child : Get<ChildTable>().Iterate(Child::kInStateValid))
+            {
+                if (Mle::IsSubChildOf(rloc, child.GetRloc16(), child.GetRlocPrefixLength()))
+                {
+                    if (!child.IsRxOnWhenIdle())
+                    {
+                        mIndirectSender.AddMessageForSleepyChild(message, child);
+                    }
+                    else
+                    {
+                        message.SetDirectTransmission();
+                    }
+                    childFound = true;
+                    break;
+                }
+            }
+        }
+        else if (ip6Header.GetDestination().IsLinkLocalUnicast())
+        {
+            Mac::Address address;
+            ip6Header.GetDestination().GetIid().ConvertToMacAddress(address);
+
+            IndirectReachable *neighbor = Get<NeighborTable>().FindIndirectReachable(address, Neighbor::kInStateAnyExceptInvalid);
+            if (neighbor != nullptr) 
+            {
+                if (!neighbor->IsRxOnWhenIdle())
+                {
+                    mIndirectSender.AddMessageForSleepyChild(message, *neighbor);
+                }
+                else
+                {
+                    message.SetDirectTransmission();
+                }
+                childFound = true;
+            }
+        }
+        
+        if (!childFound) 
+        {
+            Parent &parent = Get<Mle::Mle>().GetParent();
+            if (parent.IsStateValid() && !parent.IsRxOnWhenIdle())
+            {
+                mIndirectSender.AddMessageForSleepyChild(message, parent);
+            }
+            else
+            {
+                message.SetDirectTransmission();
+            }
+        }
+
+        break;
+    }
+
+    case Message::kTypeSupervision:
+    {
+        IndirectReachable *child = Get<ChildSupervisor>().GetDestination(message);
+        OT_ASSERT((child != nullptr) && !child->IsRxOnWhenIdle());
+
+        mIndirectSender.AddMessageForSleepyChild(message, *child);
+        break;
+    }
+
+    default:
+        message.SetDirectTransmission();
+        break;
+    }
+#else // OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    message.SetDirectTransmission();
+#endif
 
 #if (OPENTHREAD_CONFIG_MAX_FRAMES_IN_DIRECT_TX_QUEUE > 0)
     ApplyDirectTxQueueLimit(message);
 #endif
+
+    mScheduleTransmissionTask.Post();
 }
 
 Error MeshForwarder::EvictMessage(Message::Priority aPriority)

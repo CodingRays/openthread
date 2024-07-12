@@ -32,6 +32,8 @@
  */
 
 #include "mesh_forwarder.hpp"
+#include "common/message.hpp"
+#include "net/ip6_types.hpp"
 
 #if OPENTHREAD_FTD
 
@@ -97,9 +99,49 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
         else // Destination is unicast
         {
             Neighbor *neighbor = Get<NeighborTable>().FindNeighbor(destination);
+            Child    *child = (neighbor != nullptr) && Get<ChildTable>().Contains(*neighbor) ? static_cast<Child*>(neighbor) : nullptr;
 
-            if ((neighbor != nullptr) && !neighbor->IsRxOnWhenIdle() && !message.IsDirectTransmission() &&
-                Get<ChildTable>().Contains(*neighbor))
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+            if ((child != nullptr) && !child->IsDirectChild())
+            {
+                Child &nextHop = child->GetNextHop(); 
+
+                if (!Get<Mle::Mle>().IsRoutingLocator(ip6Header.GetDestination()))
+                {
+                    Ip6::Address dstAddress;
+                    Ip6::Address srcAddress;
+                    Ip6::Header  outerHeader;
+
+                    outerHeader.InitVersionTrafficClassFlow();
+                    outerHeader.SetHopLimit(4);
+                    outerHeader.SetDscp(ip6Header.GetDscp());
+                    outerHeader.SetEcn(ip6Header.GetEcn());
+                    outerHeader.SetFlow(ip6Header.GetFlow());
+                    outerHeader.SetNextHeader(Ip6::kProtoIp6);
+                    outerHeader.SetPayloadLength(message.GetLength());
+                    
+                    srcAddress.SetToRoutingLocator(Get<Mle::Mle>().GetMeshLocalPrefix(), Get<Mle::Mle>().GetRloc16());
+                    outerHeader.SetSource(srcAddress);
+
+                    dstAddress.SetToRoutingLocator(Get<Mle::Mle>().GetMeshLocalPrefix(), child->GetRloc16());
+                    outerHeader.SetDestination(dstAddress);
+
+                    IgnoreError(message.Prepend(outerHeader));
+                }
+
+                if (!nextHop.IsRxOnWhenIdle())
+                {
+                    mIndirectSender.AddMessageForSleepyChild(message, nextHop);
+                }
+                else
+                {
+                    message.SetDirectTransmission();
+                }
+            }
+            else
+#endif
+
+            if ((child != nullptr) && !neighbor->IsRxOnWhenIdle() && !message.IsDirectTransmission())
             {
                 mIndirectSender.AddMessageForSleepyChild(message, *static_cast<Child *>(neighbor));
             }
@@ -114,7 +156,7 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
 
     case Message::kTypeSupervision:
     {
-        Child *child = Get<ChildSupervisor>().GetDestination(message);
+        IndirectReachable *child = Get<ChildSupervisor>().GetDestination(message);
         OT_ASSERT((child != nullptr) && !child->IsRxOnWhenIdle());
         mIndirectSender.AddMessageForSleepyChild(message, *child);
         break;
@@ -249,7 +291,7 @@ Error MeshForwarder::EvictMessage(Message::Priority aPriority)
                 continue;
             }
 
-            if (message->IsChildPending())
+            if (message->IsTxPending())
             {
                 evict = message;
                 ExitNow(error = kErrorNone);

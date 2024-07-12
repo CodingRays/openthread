@@ -120,7 +120,7 @@ MeshForwarder::MeshForwarder(Instance &aInstance)
     , mTxDelayTimer(aInstance)
 #endif
     , mScheduleTransmissionTask(aInstance)
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     , mIndirectSender(aInstance)
 #endif
     , mDataPollSender(aInstance)
@@ -143,7 +143,7 @@ void MeshForwarder::Start(void)
     if (!mEnabled)
     {
         Get<Mac::Mac>().SetRxOnWhenIdle(true);
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
         mIndirectSender.Start();
 #endif
 
@@ -162,8 +162,10 @@ void MeshForwarder::Stop(void)
     mSendQueue.DequeueAndFreeAll();
     mReassemblyList.DequeueAndFreeAll();
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     mIndirectSender.Stop();
+#endif
+#if OPENTHREAD_FTD
     mFragmentPriorityList.Clear();
 #endif
 
@@ -210,7 +212,7 @@ void MeshForwarder::EvictMessage(Message &aMessage)
 
     if (queue == &mSendQueue)
     {
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CHILD_NETWORK_ENABLE)
         for (Child &child : Get<ChildTable>().Iterate(Child::kInStateAnyExceptInvalid))
         {
             IgnoreError(mIndirectSender.RemoveMessageFromSleepyChild(aMessage, child));
@@ -806,11 +808,18 @@ Mac::TxFrame *MeshForwarder::HandleFrameRequest(Mac::TxFrames &aTxFrames)
             VerifyOrExit(frame != nullptr);
         }
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        else if (mSendMessage->GetSubType() == Message::kSubTypeMleSubChildParentResponse || mSendMessage->GetSubType() == Message::kSubTypeMleSubChildLinkRequest)
+        {
+            // We dont want security for these messages
+        }
+#endif
         else if (Get<Mac::Mac>().IsCslEnabled() && mSendMessage->IsSubTypeMle())
         {
             mSendMessage->SetLinkSecurityEnabled(true);
         }
 #endif
+
         mMessageNextOffset =
             PrepareDataFrame(*frame, *mSendMessage, mMacAddrs, mAddMeshHeader, mMeshSource, mMeshDest, addFragHeader);
 
@@ -1248,6 +1257,14 @@ void MeshForwarder::UpdateSendMessage(Error aFrameTxError, Mac::Address &aMacDes
 
     OT_ASSERT(mSendMessage->IsDirectTransmission());
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (aFrameTxError == kErrorNone && mSendMessage->GetSubType() == Message::kSubTypeMleSubChildParentResponse)
+    {
+        // TODO hoist to constant
+        Get<Mac::Mac>().SetMessageRxOnUntil(TimerMilli::GetNow() + 100);
+    }
+#endif
+
     if (aFrameTxError != kErrorNone)
     {
         // If the transmission of any fragment frame fails,
@@ -1337,6 +1354,9 @@ void MeshForwarder::FinalizeMessageDirectTx(Message &aMessage, Error aError)
         break;
 
     case Message::kSubTypeMleChildIdRequest:
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    case Message::kSubTypeMleSubChildIdRequest:
+#endif
         Get<Mle::Mle>().HandleChildIdRequestTxDone(aMessage);
         break;
 
@@ -1352,8 +1372,8 @@ bool MeshForwarder::RemoveMessageIfNoPendingTx(Message &aMessage)
 {
     bool didRemove = false;
 
-#if OPENTHREAD_FTD
-    VerifyOrExit(!aMessage.IsDirectTransmission() && !aMessage.IsChildPending());
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
+    VerifyOrExit(!aMessage.IsDirectTransmission() && !aMessage.IsTxPending());
 #else
     VerifyOrExit(!aMessage.IsDirectTransmission());
 #endif
@@ -1584,6 +1604,73 @@ void MeshForwarder::ClearReassemblyList(void)
     }
 }
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+bool MeshForwarder::FrameRequiresWakeup(void)
+{
+    return (mSendMessage != nullptr) && mSendMessage->GetSubType() == Message::kSubTypeMleSubChildParentRequest;
+}
+
+void MeshForwarder::HandleAbortedWakeup(uint16_t aDelayMs)
+{
+    if (mSendMessage != nullptr && mSendMessage->GetSubType() == Message::kSubTypeMleSubChildParentRequest)
+    {
+        Get<Mle::Mle>().HandleAttachWakeupCollision(aDelayMs);
+    }
+}
+
+uint16_t MeshForwarder::HandleWakeupStart(void)
+{
+    return Get<Mle::Mle>().CurrentWakeupLength();
+}
+
+Mac::TxFrame *MeshForwarder::HandleWakeupFrameRequest(Mac::TxFrames &aTxFrames)
+{
+    Mac::TxFrame  *frame = nullptr;
+    Mac::PanIds    panIds;
+    Mac::Addresses addresses;
+    uint8_t        ieOffset = 0;
+
+    VerifyOrExit(mEnabled && mSendMessage != nullptr);
+
+#if OPENTHREAD_CONFIG_MULTI_RADIO
+    frame = &aTxFrames.GetTxFrame(Mac::kRadioTypeIeee802154);
+#else
+    frame = &aTxFrames.GetTxFrame();
+#endif
+
+    panIds.SetSource(Get<Mac::Mac>().GetPanId());
+    panIds.SetDestination(Get<Mac::Mac>().GetPanId());
+
+    switch (mSendMessage->GetType())
+    {
+    case Message::kTypeIp6:
+    {
+        Ip6::Header ip6Header;
+
+        IgnoreError(mSendMessage->Read(0, ip6Header));
+
+        GetMacSourceAddress(ip6Header.GetSource(), addresses.mSource);
+        GetMacDestinationAddress(ip6Header.GetDestination(), addresses.mDestination);
+        break;
+    }
+
+    default:
+        ExitNow(frame = nullptr);
+    }
+
+    // frame->InitMacHeader(Mac::Frame::kTypeMultipurpose, Mac::Frame::kVersion2015, addresses, panIds, Mac::Frame::kSecurityNone, Mac::Frame::kKeyIdMode0);
+
+    frame->InitMacHeader(Mac::Frame::kTypeData, Mac::Frame::kVersion2015, addresses, panIds, Mac::Frame::kSecurityNone, Mac::Frame::kKeyIdMode0);
+
+    frame->AppendHeaderIeAt<Mac::RendezvousIe>(ieOffset);
+
+    mSendBusy = true;
+
+exit:
+    return frame;
+}
+#endif // OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+
 void MeshForwarder::HandleTimeTick(void)
 {
     bool continueRxingTicks = false;
@@ -1789,6 +1876,13 @@ void MeshForwarder::AppendHeaderIe(const Message *aMessage, Mac::TxFrame &aFrame
         IgnoreError(aFrame.AppendHeaderIeAt<Mac::CslIe>(index));
         aFrame.SetCslIePresent(true);
         iePresent = true;
+
+#if OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        if (aMessage->GetSubType() == Message::kSubTypeMleChildUpdateRequest)
+        {
+            //IgnoreError(aFrame.AppendHeaderIeAt<Mac::WakeupIe>(index));
+        }
+#endif
     }
 #endif
 

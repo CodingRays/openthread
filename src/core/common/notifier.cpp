@@ -133,11 +133,13 @@ void Notifier::EmitEvents(void)
 #if OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
     Get<BackboneRouter::Manager>().HandleNotifierEvents(events);
 #endif
-    Get<ChildSupervisor>().HandleNotifierEvents(events);
 #if OPENTHREAD_CONFIG_DATASET_UPDATER_ENABLE || OPENTHREAD_CONFIG_CHANNEL_MANAGER_ENABLE
     Get<MeshCoP::DatasetUpdater>().HandleNotifierEvents(events);
 #endif
 #endif // OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
+    Get<ChildSupervisor>().HandleNotifierEvents(events);
+#endif
 #if OPENTHREAD_FTD || OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE || OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
     Get<NetworkData::Notifier>().HandleNotifierEvents(events);
 #endif

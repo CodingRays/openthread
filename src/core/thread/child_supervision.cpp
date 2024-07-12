@@ -44,28 +44,37 @@ namespace ot {
 
 RegisterLogModule("ChildSupervsn");
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 ChildSupervisor::ChildSupervisor(Instance &aInstance)
     : InstanceLocator(aInstance)
 {
 }
 
-Child *ChildSupervisor::GetDestination(const Message &aMessage) const
+IndirectReachable *ChildSupervisor::GetDestination(const Message &aMessage) const
 {
-    Child   *child = nullptr;
-    uint16_t childIndex;
+    IndirectReachable *child = nullptr;
+    uint16_t           childIndex;
 
     VerifyOrExit(aMessage.GetType() == Message::kTypeSupervision);
 
     IgnoreError(aMessage.Read(0, childIndex));
-    child = Get<ChildTable>().GetChildAtIndex(childIndex);
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    if (childIndex == UINT16_MAX)
+    {
+        child = &Get<Mle::Mle>().GetParent();
+    }
+    else
+#endif
+    {
+        child = Get<ChildTable>().GetChildAtIndex(childIndex);
+    }
 
 exit:
     return child;
 }
 
-void ChildSupervisor::SendMessage(Child &aChild)
+void ChildSupervisor::SendMessage(IndirectReachable &aChild)
 {
     OwnedPtr<Message> messagePtr;
     uint16_t          childIndex;
@@ -79,19 +88,33 @@ void ChildSupervisor::SendMessage(Child &aChild)
     // The child index is stored here in the message content to allow
     // the destination of the message to be later retrieved using
     // `ChildSupervisor::GetDestination(message)`.
+    if (Get<ChildTable>().GetNeighborIndex(aChild, childIndex) == kErrorNone)
+    {
+        SuccessOrExit(messagePtr->Append(childIndex));
+    }
+    else
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    {
+        SuccessOrExit(messagePtr->Append(UINT16_MAX));
+    }
+#else
+    {
+        OT_ASSERT(false);
+    }
+#endif
 
-    childIndex = Get<ChildTable>().GetChildIndex(aChild);
-    SuccessOrExit(messagePtr->Append(childIndex));
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    aChild.IncrementResyncAttempts();
+#endif
 
     Get<MeshForwarder>().SendMessage(messagePtr.PassOwnership());
-
     LogInfo("Sending supervision message to child 0x%04x", aChild.GetRloc16());
 
 exit:
     return;
 }
 
-void ChildSupervisor::UpdateOnSend(Child &aChild) { aChild.ResetSecondsSinceLastSupervision(); }
+void ChildSupervisor::UpdateOnSend(IndirectReachable &aChild) { aChild.ResetSecondsSinceLastSupervision(); }
 
 void ChildSupervisor::HandleTimeTick(void)
 {
@@ -102,11 +125,31 @@ void ChildSupervisor::HandleTimeTick(void)
             continue;
         }
 
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        if (!child.IsDirectChild())
+        {
+            continue;
+        }
+#endif
+
         child.IncrementSecondsSinceLastSupervision();
 
         if (child.GetSecondsSinceLastSupervision() >= child.GetSupervisionInterval())
         {
-            SendMessage(child);
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+            // TODO find a better solution for this (resync attempts may not increase
+            // since the last message will be blocked in the queue.)
+            if (/*child.GetResyncAttempts() > 0 && */!child.IsCslSynchronized())
+            {
+                LogWarn("Child %#06X failed to resync. Dropping child.", child.GetRloc16());
+
+                Get<Mle::MleSubChild>().RemoveNeighbor(child);    
+            }
+            else
+#endif
+            {
+                SendMessage(child);
+            }
         }
     }
 }
@@ -116,7 +159,6 @@ void ChildSupervisor::CheckState(void)
     // Child Supervision should run if Thread MLE operation is
     // enabled, and there is at least one "valid" child in the
     // child table.
-
     bool shouldRun = (!Get<Mle::Mle>().IsDisabled() && Get<ChildTable>().HasChildren(Child::kInStateValid));
 
     if (shouldRun && !Get<TimeTicker>().IsReceiverRegistered(TimeTicker::kChildSupervisor))
@@ -140,7 +182,7 @@ void ChildSupervisor::HandleNotifierEvents(Events aEvents)
     }
 }
 
-#endif // #if OPENTHREAD_FTD
+#endif // #if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 SupervisionListener::SupervisionListener(Instance &aInstance)
     : InstanceLocator(aInstance)

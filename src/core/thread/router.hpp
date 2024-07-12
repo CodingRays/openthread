@@ -36,6 +36,7 @@
 
 #include "openthread-core-config.h"
 
+#include "mac/sub_mac.hpp"
 #include "thread/neighbor.hpp"
 
 namespace ot {
@@ -46,7 +47,11 @@ class Parent;
  * Represents a Thread Router
  *
  */
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+class Router : public IndirectReachable
+#else
 class Router : public Neighbor
+#endif
 {
 public:
     /**
@@ -170,6 +175,9 @@ private:
  *
  */
 class Parent : public Router
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+             , public Mac::SubMac::CslInfo
+#endif
 {
 public:
     /**
@@ -182,7 +190,7 @@ public:
     {
         Neighbor::Init(aInstance);
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-        mCslAccuracy.Init();
+        Mac::SubMac::CslInfo::Init();
 #endif
     }
 
@@ -208,28 +216,73 @@ public:
      */
     void SetLeaderCost(uint8_t aLeaderCost) { mLeaderCost = aLeaderCost; }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
     /**
-     * Gets the CSL accuracy (clock accuracy and uncertainty).
+     * Returns if the parent is itself a sub child.
      *
-     * @returns The CSL accuracy.
+     * @retval TRUE   If this parent is a sub child.
+     * @retval FALSE  If this parent is a FTD.
      *
      */
-    const Mac::CslAccuracy &GetCslAccuracy(void) const { return mCslAccuracy; }
+    bool IsSubChild(void) const { return mSubChild; }
 
     /**
-     * Sets CSL accuracy.
+     * Sets whether this parent is a sub child.
      *
-     * @param[in] aCslAccuracy  The CSL accuracy.
+     * @param aSubChild  Whether this parent is a sub child.
      *
      */
-    void SetCslAccuracy(const Mac::CslAccuracy &aCslAccuracy) { mCslAccuracy = aCslAccuracy; }
+    void SetSubChild(bool aSubChild) { mSubChild = aSubChild; }
+
+    /**
+     * Returns the CSL round trip time to this parent.
+     *
+     * @return The CSL round trip time to this parent.
+     *
+     */
+    uint32_t GetCslRoundTripTime(void) const { return mCslRoundTripTime; }
+
+    /**
+     * Sets the CSL round trip time to this parent.
+     *
+     * @param aCslRoundTripTime  The CSL round trip time to this parent.
+     *
+     */
+    void SetCslRoundTripTime(uint32_t aCslRoundTripTime) { mCslRoundTripTime = aCslRoundTripTime; }
+
+    /**
+     * Returns the link count to this parent.
+     *
+     * This is the number of links between this parent and the FTD parent. I.e. if
+     * the parent is a direct sub child it is 1, if there is one sub child between
+     * the parent and the FTD its 2.
+     *
+     * @return The link count to this parent.
+     *
+     */
+    uint8_t GetHopCount(void) const { return mHopCount; }
+
+    /**
+     * Sets the link count of this parent.
+     *
+     * @param aHopCount  The link count of this parent.
+     *
+     */
+    void SetHopCount(uint8_t aHopCount) { mHopCount = aHopCount; }
+
+    uint8_t GetRateLimit(void) const { return mRateLimit; }
+
+    void SetRateLimit(uint8_t aRateLimit) { mRateLimit = aRateLimit; }
 #endif
 
 private:
     uint8_t mLeaderCost;
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    Mac::CslAccuracy mCslAccuracy; // CSL accuracy (clock accuracy in ppm and uncertainty).
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool     mSubChild : 1;     ///< True if this parent is a sub child.
+    uint32_t mCslRoundTripTime;
+    uint8_t  mHopCount;
+    uint8_t  mRateLimit;
 #endif
 };
 

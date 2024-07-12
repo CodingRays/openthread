@@ -39,6 +39,7 @@
 #include "common/locator.hpp"
 #include "common/non_copyable.hpp"
 #include "thread/neighbor.hpp"
+#include "thread/router.hpp"
 
 namespace ot {
 
@@ -98,7 +99,7 @@ public:
      * @returns A pointer to the `Neighbor` corresponding to @p aShortAddress, `nullptr` otherwise.
      *
      */
-    Neighbor *FindParent(Mac::ShortAddress     aShortAddress,
+    Parent *FindParent(Mac::ShortAddress     aShortAddress,
                          Neighbor::StateFilter aFilter = Neighbor::kInStateValidOrRestoring);
 
     /**
@@ -111,7 +112,7 @@ public:
      * @returns A pointer to the `Neighbor` corresponding to @p aExtAddress, `nullptr` otherwise.
      *
      */
-    Neighbor *FindParent(const Mac::ExtAddress &aExtAddress,
+    Parent *FindParent(const Mac::ExtAddress &aExtAddress,
                          Neighbor::StateFilter  aFilter = Neighbor::kInStateValidOrRestoring);
 
     /**
@@ -124,7 +125,7 @@ public:
      * @returns A pointer to the `Neighbor` corresponding to @p aMacAddress, `nullptr` otherwise.
      *
      */
-    Neighbor *FindParent(const Mac::Address   &aMacAddress,
+    Parent *FindParent(const Mac::Address   &aMacAddress,
                          Neighbor::StateFilter aFilter = Neighbor::kInStateValidOrRestoring);
 
     /**
@@ -162,6 +163,11 @@ public:
      */
     Neighbor *FindNeighbor(const Mac::Address   &aMacAddress,
                            Neighbor::StateFilter aFilter = Neighbor::kInStateValidOrRestoring);
+
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
+    IndirectReachable *FindIndirectReachable(const Mac::Address &aMacAddress,
+                                             Neighbor::StateFilter aFilter = Neighbor::kInStateValidOrRestoring);
+#endif
 
 #if OPENTHREAD_FTD
 
@@ -238,7 +244,7 @@ public:
     void Signal(Event aEvent, const Neighbor &aNeighbor);
 
 private:
-    Neighbor *FindParent(const Neighbor::AddressMatcher &aMatcher);
+    Parent *FindParent(const Neighbor::AddressMatcher &aMatcher);
     Neighbor *FindNeighbor(const Neighbor::AddressMatcher &aMatcher);
 #if OPENTHREAD_FTD
     Neighbor *FindChildOrRouter(const Neighbor::AddressMatcher &aMatcher);

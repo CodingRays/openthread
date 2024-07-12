@@ -33,7 +33,7 @@
 
 #include "src_match_controller.hpp"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
@@ -57,7 +57,7 @@ SourceMatchController::SourceMatchController(Instance &aInstance)
     ClearTable();
 }
 
-void SourceMatchController::IncrementMessageCount(Child &aChild)
+void SourceMatchController::IncrementMessageCount(IndirectReachable &aChild)
 {
     if (aChild.GetIndirectMessageCount() == 0)
     {
@@ -67,7 +67,7 @@ void SourceMatchController::IncrementMessageCount(Child &aChild)
     aChild.IncrementIndirectMessageCount();
 }
 
-void SourceMatchController::DecrementMessageCount(Child &aChild)
+void SourceMatchController::DecrementMessageCount(IndirectReachable &aChild)
 {
     if (aChild.GetIndirectMessageCount() == 0)
     {
@@ -86,13 +86,13 @@ exit:
     return;
 }
 
-void SourceMatchController::ResetMessageCount(Child &aChild)
+void SourceMatchController::ResetMessageCount(IndirectReachable &aChild)
 {
     aChild.ResetIndirectMessageCount();
     ClearEntry(aChild);
 }
 
-void SourceMatchController::SetSrcMatchAsShort(Child &aChild, bool aUseShortAddress)
+void SourceMatchController::SetSrcMatchAsShort(IndirectReachable &aChild, bool aUseShortAddress)
 {
     VerifyOrExit(aChild.IsIndirectSourceMatchShort() != aUseShortAddress);
 
@@ -125,7 +125,7 @@ void SourceMatchController::Enable(bool aEnable)
     LogDebg("%sabling", mEnabled ? "En" : "Dis");
 }
 
-void SourceMatchController::AddEntry(Child &aChild)
+void SourceMatchController::AddEntry(IndirectReachable &aChild)
 {
     aChild.SetIndirectSourceMatchPending(true);
 
@@ -144,7 +144,7 @@ exit:
     return;
 }
 
-Error SourceMatchController::AddAddress(const Child &aChild)
+Error SourceMatchController::AddAddress(const IndirectReachable &aChild)
 {
     Error error = kErrorNone;
 
@@ -168,7 +168,7 @@ Error SourceMatchController::AddAddress(const Child &aChild)
     return error;
 }
 
-void SourceMatchController::ClearEntry(Child &aChild)
+void SourceMatchController::ClearEntry(IndirectReachable &aChild)
 {
     Error error = kErrorNone;
 
@@ -227,4 +227,4 @@ exit:
 
 } // namespace ot
 
-#endif // OPENTHREAD_FTD
+#endif // OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)

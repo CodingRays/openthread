@@ -78,6 +78,7 @@ extern "C" {
 #define OT_NETWORK_DIAGNOSTIC_TLV_QUERY_ID 33             ///< Query ID TLV
 #define OT_NETWORK_DIAGNOSTIC_TLV_MLE_COUNTERS 34         ///< MLE Counters TLV
 #define OT_NETWORK_DIAGNOSTIC_TLV_VENDOR_APP_URL 35       ///< Vendor App URL TLV
+#define OT_NETWORK_DIAGNOSTIC_TLV_CHILD_SUB_CHILD_INFO 36 ///< Sub child info
 
 #define OT_NETWORK_DIAGNOSTIC_MAX_VENDOR_NAME_TLV_LENGTH 32          ///< Max length of Vendor Name TLV.
 #define OT_NETWORK_DIAGNOSTIC_MAX_VENDOR_MODEL_TLV_LENGTH 32         ///< Max length of Vendor Model TLV.

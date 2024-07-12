@@ -105,6 +105,7 @@ void ThreadNetif::Down(void)
     RemoveAllExternalUnicastAddresses();
     UnsubscribeAllExternalMulticastAddresses();
     UnsubscribeAllRoutersMulticast();
+    UnsubscribeAllSubChildrenMulticast();
     UnsubscribeAllNodesMulticast();
 
     mIsUp = false;

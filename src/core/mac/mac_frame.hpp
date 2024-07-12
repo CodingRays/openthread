@@ -1788,6 +1788,58 @@ private:
     uint16_t mPeriod;
 } OT_TOOL_PACKED_END;
 
+OT_TOOL_PACKED_BEGIN
+class WakeupIe
+{
+public:
+    static constexpr uint8_t kHeaderIeId = 0x00;
+    static constexpr uint8_t kIeContentSize = 3 + sizeof(uint16_t);
+
+    void Init(void) { memcpy(&mVendorOui, &kVendorOui, sizeof(kVendorOui)); }
+
+    uint8_t GetWakeupInterval(void) const { return mWakeupInterval; }
+
+    void SetWakeupInterval(uint8_t aWakeupInterval) { mWakeupInterval = aWakeupInterval; }
+
+    uint8_t GetWakeupPhase(void) const { return mWakeupPhase; }
+
+    void SetWakeupPhase(uint8_t aWakeupPhase) { mWakeupPhase = aWakeupPhase; }
+
+private:
+    static constexpr uint8_t kVendorOui[3] = { 0xEA, 0xB8, 0x9B };
+
+    uint8_t mVendorOui[3];
+    uint8_t mWakeupInterval;
+    uint8_t mWakeupPhase;
+} OT_TOOL_PACKED_END;
+
+OT_TOOL_PACKED_BEGIN
+class RendezvousIe
+{
+public:
+    static constexpr uint8_t kHeaderIeId = 0x1d;
+    static constexpr uint8_t kIeContentSize = sizeof(uint16_t);
+
+    /**
+     * Returns the Rendezvous Time.
+     *
+     * @returns the Rendezvous Time.
+     *
+     */
+     uint16_t GetRendezvousTime(void) const { return LittleEndian::HostSwap16(mRendezvousTime); }
+
+     /**
+      * Sets the Rendezvous Time.
+      *
+      * @param[in]  aRendezvousTime  The RendezvousTime.
+      *
+      */
+      void SetRendezvousTime(uint16_t aRendezvousTime) { mRendezvousTime = LittleEndian::HostSwap16(aRendezvousTime); }
+
+private:
+    uint16_t mRendezvousTime;
+} OT_TOOL_PACKED_END;
+
 /**
  * Implements Termination2 IE.
  *

@@ -275,6 +275,39 @@ template <> otError Interpreter::Process<Cmd("reset")>(Arg aArgs[])
     return error;
 }
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+template <> otError Interpreter::Process<Cmd("wakeup")>(Arg aArgs[])
+{
+    otError error = OT_ERROR_NONE;
+
+    if (aArgs[0].IsEmpty())
+    {
+        OutputLine("Min: %luus\nMax: %luus", 
+                ToUlong(otThreadGetSubChildMinWakeupLength(GetInstancePtr())), 
+                ToUlong(otThreadGetSubChildMaxWakeupLength(GetInstancePtr())));
+    }
+    else if (aArgs[0] == "min")
+    {
+        uint32_t wakeupLength;
+        SuccessOrExit(error = aArgs[1].ParseAsUint32(wakeupLength));
+        SuccessOrExit(error = otThreadSetSubChildMinWakeupLength(GetInstancePtr(), wakeupLength));
+    }
+    else if (aArgs[0] == "max")
+    {
+        uint32_t wakeupLength;
+        SuccessOrExit(error = aArgs[1].ParseAsUint32(wakeupLength));
+        SuccessOrExit(error = otThreadSetSubChildMaxWakeupLength(GetInstancePtr(), wakeupLength));
+    }
+    else
+    {
+        error = OT_ERROR_INVALID_ARGS;
+    }
+
+exit:
+    return error;
+}
+#endif
+
 void Interpreter::ProcessLine(char *aBuf)
 {
     Arg     args[kMaxArgs + 1];
@@ -1572,6 +1605,96 @@ template <> otError Interpreter::Process<Cmd("channel")>(Arg aArgs[])
 exit:
     return error;
 }
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+template <> otError Interpreter::Process<Cmd("subchild")>(Arg aArgs[])
+{
+    otError          error = OT_ERROR_NONE;
+    otLinkModeConfig linkMode;
+    char             linkModeString[kLinkModeStringSize];
+
+    if (aArgs[0].IsEmpty())
+    {
+        otRouterInfo parent;
+
+        VerifyOrExit(otThreadGetDeviceRole(GetInstancePtr()) == OT_DEVICE_ROLE_CHILD, error = OT_ERROR_INVALID_STATE);
+
+        otThreadGetParentInfo(GetInstancePtr(), &parent);
+
+        OutputLine("Direct Child: %s", otThreadIsDirectChild(GetInstancePtr()) ? "true" : "false");
+        OutputLine("RLOC Prefix Length: %u", otThreadGetRlocPrefixLength(GetInstancePtr()));
+        OutputLine("Parent RX On When Idle: %s", parent.mRxOnWhenIdle ? "true" : "false");
+    }
+    else if (aArgs[0] == "list" || aArgs[0] == "table")
+    {
+        bool     isTable = aArgs[0] == "table";
+        uint16_t maxChildren = otThreadGetMaxSubChildren(GetInstancePtr());
+
+        if (isTable)
+        {
+            static const char *const kChildTableTitles[] = {
+                "RLOC16", "Prfx", "Age", "LQ In", "R", "Ver", "QMsgCnt", "Extended MAC",
+            };
+
+            static const uint8_t kChildTableColumnWidths[] = {
+                8, 4, 12, 7, 1, 3, 7, 18,
+            };
+
+            OutputTableHeader(kChildTableTitles, kChildTableColumnWidths);
+        }
+
+        for (uint16_t i = 0; i < maxChildren; i++)
+        {
+            otSubChildInfo info;
+
+            if (otThreadGetSubChildInfoByIndex(GetInstancePtr(), i, &info) != kErrorNone)
+            {
+                continue;
+            }
+
+            if (isTable)
+            {
+                OutputFormat("| 0x%04x ", info.mRloc16);
+                OutputFormat("| %2u ", info.mPrefixLength);
+                OutputFormat("| %10lu ", ToUlong(info.mAge));
+                OutputFormat("| %5u ", info.mLinkQualityIn);
+                OutputFormat("|%1d", info.mRxOnWhenIdle);
+                OutputFormat("|%3u", info.mVersion);
+                OutputFormat("| %5u ", info.mQueuedMessageCnt);
+                OutputFormat("| ");
+                OutputExtAddress(info.mExtAddress);
+                OutputLine(" |");
+            }
+            else
+            {
+                OutputFormat("%#06x ", info.mRloc16);
+            }
+        }
+    }
+    else
+    {
+        uint16_t       rloc16;
+        otSubChildInfo info;
+
+        SuccessOrExit(error = aArgs[0].ParseAsUint16(rloc16));
+        SuccessOrExit(error = otThreadGetSubChildInfoByRloc16(GetInstancePtr(), rloc16, &info)); 
+
+        OutputLine("Rloc: %04x", info.mRloc16);
+        OutputLine("Prefix Length: %u", info.mPrefixLength);
+        OutputFormat("Ext Addr: ");
+        OutputExtAddressLine(info.mExtAddress);
+        linkMode.mRxOnWhenIdle = info.mRxOnWhenIdle;
+        OutputLine("Mode: %s", LinkModeToString(linkMode, linkModeString));
+        OutputLine("Timeout: %lu", ToUlong(info.mTimeout));
+        OutputLine("Age: %lu", ToUlong(info.mAge));
+        OutputLine("Link Quality In: %u", info.mLinkQualityIn);
+        OutputLine("RSSI: %d", info.mAverageRssi);
+    }
+
+exit:
+    return error;
+}
+#endif
 
 #if OPENTHREAD_FTD
 template <> otError Interpreter::Process<Cmd("child")>(Arg aArgs[])
@@ -8418,6 +8541,9 @@ otError Interpreter::ProcessCommand(Arg aArgs[])
         CmdEntry("srp"),
 #endif
         CmdEntry("state"),
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        CmdEntry("subchild"),
+#endif
 #if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE && OPENTHREAD_CONFIG_CLI_BLE_SECURE_ENABLE
         CmdEntry("tcat"),
 #endif
@@ -8449,6 +8575,9 @@ otError Interpreter::ProcessCommand(Arg aArgs[])
 #endif
 #endif // OPENTHREAD_FTD || OPENTHREAD_MTD
         CmdEntry("version"),
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+        CmdEntry("wakeup"),
+#endif
     };
 
 #undef CmdEntry

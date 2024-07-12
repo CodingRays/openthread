@@ -573,6 +573,13 @@ private:
     void FinalizeMessageDirectTx(Message &aMessage, Error aError);
     bool RemoveMessageIfNoPendingTx(Message &aMessage);
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool          FrameRequiresWakeup(void);
+    void          HandleAbortedWakeup(uint16_t aDelayMs);
+    uint16_t      HandleWakeupStart(void);
+    Mac::TxFrame *HandleWakeupFrameRequest(Mac::TxFrames &aTxFrames);
+#endif
+
     void HandleTimeTick(void);
     void ScheduleTransmissionTask(void);
 
@@ -663,6 +670,8 @@ private:
 
 #if OPENTHREAD_FTD
     FragmentPriorityList mFragmentPriorityList;
+#endif
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     IndirectSender       mIndirectSender;
 #endif
 

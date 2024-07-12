@@ -84,6 +84,7 @@ set(COMMON_SOURCES
     api/tcp_api.cpp
     api/tcp_ext_api.cpp
     api/thread_api.cpp
+    api/thread_mtd_api.cpp
     api/thread_ftd_api.cpp
     api/trel_api.cpp
     api/udp_api.cpp
@@ -222,6 +223,7 @@ set(COMMON_SOURCES
     thread/mesh_forwarder_mtd.cpp
     thread/mle.cpp
     thread/mle_router.cpp
+    thread/mle_sub_child.cpp
     thread/mle_tlvs.cpp
     thread/mle_types.cpp
     thread/mlr_manager.cpp

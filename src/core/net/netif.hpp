@@ -534,6 +534,10 @@ public:
      */
     void UnsubscribeAllRoutersMulticast(void);
 
+    void SubscribeAllSubChildrenMulticast(void);
+
+    void UnsubscribeAllSubChildrenMulticast(void);
+
     /**
      * Returns the linked list of multicast addresses.
      *
@@ -696,6 +700,7 @@ private:
     static const otNetifMulticastAddress kRealmLocalAllNodesMulticastAddress;
     static const otNetifMulticastAddress kLinkLocalAllRoutersMulticastAddress;
     static const otNetifMulticastAddress kRealmLocalAllRoutersMulticastAddress;
+    static const otNetifMulticastAddress kLinkLocalAllSubChildrenMulticastAddress;
 };
 
 /**

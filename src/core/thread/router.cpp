@@ -65,6 +65,14 @@ void Router::Info::SetFrom(const Parent &aParent)
     mCslClockAccuracy = aParent.GetCslAccuracy().GetClockAccuracy();
     mCslUncertainty   = aParent.GetCslAccuracy().GetUncertainty();
 #endif
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    mIsSubChild = aParent.IsSubChild();
+    mRxOnWhenIdle = aParent.IsRxOnWhenIdle();
+#else
+    mIsSubChild = false;
+    mRxOnWhenIdle = true;
+#endif
 }
 
 void Router::Clear(void)

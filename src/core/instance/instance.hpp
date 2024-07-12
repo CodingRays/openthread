@@ -115,6 +115,7 @@
 #include "thread/mesh_forwarder.hpp"
 #include "thread/mle.hpp"
 #include "thread/mle_router.hpp"
+#include "thread/mle_sub_child.hpp"
 #include "thread/mlr_manager.hpp"
 #include "thread/network_data_local.hpp"
 #include "thread/network_data_notifier.hpp"
@@ -625,7 +626,7 @@ private:
 #endif
 #endif
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
     ChildSupervisor mChildSupervisor;
 #endif
     SupervisionListener mSupervisionListener;
@@ -777,13 +778,19 @@ template <> inline Mle::Mle &Instance::Get(void) { return mMleRouter; }
 template <> inline Mle::MleRouter &Instance::Get(void) { return mMleRouter; }
 #endif
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+template <> inline Mle::MleSubChild &Instance::Get(void) { return mMleRouter; }
+#endif
+
 template <> inline Mle::DiscoverScanner &Instance::Get(void) { return mDiscoverScanner; }
 
 template <> inline NeighborTable &Instance::Get(void) { return mMleRouter.mNeighborTable; }
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE && OPENTHREAD_MTD)
 template <> inline ChildTable &Instance::Get(void) { return mMleRouter.mChildTable; }
+#endif
 
+#if OPENTHREAD_FTD
 template <> inline RouterTable &Instance::Get(void) { return mMleRouter.mRouterTable; }
 #endif
 
@@ -815,8 +822,7 @@ template <> inline Ip6::Filter &Instance::Get(void) { return mIp6Filter; }
 
 template <> inline AddressResolver &Instance::Get(void) { return mAddressResolver; }
 
-#if OPENTHREAD_FTD
-
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 template <> inline IndirectSender &Instance::Get(void) { return mMeshForwarder.mIndirectSender; }
 
 template <> inline SourceMatchController &Instance::Get(void)
@@ -825,15 +831,17 @@ template <> inline SourceMatchController &Instance::Get(void)
 }
 
 template <> inline DataPollHandler &Instance::Get(void) { return mMeshForwarder.mIndirectSender.mDataPollHandler; }
-
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-template <> inline CslTxScheduler &Instance::Get(void) { return mMeshForwarder.mIndirectSender.mCslTxScheduler; }
 #endif
 
+#if OPENTHREAD_FTD
 template <> inline MeshCoP::Leader &Instance::Get(void) { return mLeader; }
 
 template <> inline MeshCoP::JoinerRouter &Instance::Get(void) { return mJoinerRouter; }
 #endif // OPENTHREAD_FTD
+
+#if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
+template <> inline CslTxScheduler &Instance::Get(void) { return mMeshForwarder.mIndirectSender.mCslTxScheduler; }
+#endif
 
 template <> inline AnnounceBeginServer &Instance::Get(void) { return mAnnounceBegin; }
 
@@ -963,7 +971,7 @@ template <> inline Utils::JamDetector &Instance::Get(void) { return mJamDetector
 template <> inline Sntp::Client &Instance::Get(void) { return mSntpClient; }
 #endif
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 template <> inline ChildSupervisor &Instance::Get(void) { return mChildSupervisor; }
 #endif
 template <> inline SupervisionListener &Instance::Get(void) { return mSupervisionListener; }

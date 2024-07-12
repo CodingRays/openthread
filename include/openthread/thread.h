@@ -141,6 +141,8 @@ typedef struct
     uint8_t      mAge;                 ///< Time last heard
     bool         mAllocated : 1;       ///< Router ID allocated or not
     bool         mLinkEstablished : 1; ///< Link established with Router ID or not
+    bool         mIsSubChild : 1;      ///< Only valid when OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE is enabled
+    bool         mRxOnWhenIdle : 1;    ///< Only valid when OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE is enabled
     uint8_t      mVersion;             ///< Thread version
 
     /**

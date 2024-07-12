@@ -540,7 +540,19 @@ public:
      * @retval  kErrorNone           Successfully enabled or disabled CSL.
      *
      */
-    Error EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
+    Error EnableCsl(uint32_t aCslPeriod);
+
+    Error AddCslShortEntry(Mac::ShortAddress aShortAddr);
+
+    Error AddCslExtEntry(const Mac::ExtAddress &aExtAddr);
+
+    Error ClearCslShortEntry(Mac::ShortAddress aShortAddr);
+
+    Error ClearCslExtEntry(const Mac::ExtAddress &aExtAddr);
+
+    Error ClearCslShortEntries(void);
+
+    Error ClearCslExtEntries(void);
 
     /**
      * Resets CSL receiver in radio.
@@ -968,9 +980,39 @@ inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDurat
     return error;
 }
 
-inline Error Radio::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
+inline Error Radio::EnableCsl(uint32_t aCslPeriod)
 {
-    return otPlatRadioEnableCsl(GetInstancePtr(), aCslPeriod, aShortAddr, aExtAddr);
+    return otPlatRadioEnableCsl(GetInstancePtr(), aCslPeriod);
+}
+
+inline Error Radio::AddCslShortEntry(Mac::ShortAddress aShortAddress)
+{
+    return otPlatRadioAddCslShortEntry(GetInstancePtr(), aShortAddress);
+}
+
+inline Error Radio::AddCslExtEntry(const Mac::ExtAddress &aExtAddress)
+{
+    return otPlatRadioAddCslExtEntry(GetInstancePtr(), &aExtAddress);
+}
+
+inline Error Radio::ClearCslShortEntry(Mac::ShortAddress aShortAddress)
+{
+    return otPlatRadioClearCslShortEntry(GetInstancePtr(), aShortAddress);
+}
+
+inline Error Radio::ClearCslExtEntry(const Mac::ExtAddress &aExtAddress)
+{
+    return otPlatRadioClearCslExtEntry(GetInstancePtr(), &aExtAddress);
+}
+
+inline Error Radio::ClearCslShortEntries(void)
+{
+    return otPlatRadioClearCslShortEntries(GetInstancePtr());
+}
+
+inline Error Radio::ClearCslExtEntries(void)
+{
+    return otPlatRadioClearCslExtEntries(GetInstancePtr());
 }
 
 inline Error Radio::ResetCsl(void) { return otPlatRadioResetCsl(GetInstancePtr()); }

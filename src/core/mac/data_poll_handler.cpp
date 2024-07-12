@@ -33,7 +33,7 @@
 
 #include "data_poll_handler.hpp"
 
-#if OPENTHREAD_FTD
+#if OPENTHREAD_FTD || (OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE)
 
 #include "common/code_utils.hpp"
 #include "common/locator_getters.hpp"
@@ -49,9 +49,9 @@ DataPollHandler::Callbacks::Callbacks(Instance &aInstance)
 {
 }
 
-inline Error DataPollHandler::Callbacks::PrepareFrameForChild(Mac::TxFrame &aFrame,
-                                                              FrameContext &aContext,
-                                                              Child        &aChild)
+inline Error DataPollHandler::Callbacks::PrepareFrameForChild(Mac::TxFrame      &aFrame,
+                                                              FrameContext      &aContext,
+                                                              IndirectReachable &aChild)
 {
     return Get<IndirectSender>().PrepareFrameForChild(aFrame, aContext, aChild);
 }
@@ -59,12 +59,12 @@ inline Error DataPollHandler::Callbacks::PrepareFrameForChild(Mac::TxFrame &aFra
 inline void DataPollHandler::Callbacks::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
                                                                const FrameContext &aContext,
                                                                Error               aError,
-                                                               Child              &aChild)
+                                                               IndirectReachable  &aChild)
 {
     Get<IndirectSender>().HandleSentFrameToChild(aFrame, aContext, aError, aChild);
 }
 
-inline void DataPollHandler::Callbacks::HandleFrameChangeDone(Child &aChild)
+inline void DataPollHandler::Callbacks::HandleFrameChangeDone(IndirectReachable &aChild)
 {
     Get<IndirectSender>().HandleFrameChangeDone(aChild);
 }
@@ -92,7 +92,7 @@ void DataPollHandler::Clear(void)
     mIndirectTxChild = nullptr;
 }
 
-void DataPollHandler::HandleNewFrame(Child &aChild)
+void DataPollHandler::HandleNewFrame(IndirectReachable &aChild)
 {
     OT_UNUSED_VARIABLE(aChild);
 
@@ -104,7 +104,7 @@ void DataPollHandler::HandleNewFrame(Child &aChild)
     // delegated to RCP).
 }
 
-void DataPollHandler::RequestFrameChange(FrameChange aChange, Child &aChild)
+void DataPollHandler::RequestFrameChange(FrameChange aChange, IndirectReachable &aChild)
 {
     if ((mIndirectTxChild == &aChild) && Get<Mac::Mac>().IsPerformingIndirectTransmit())
     {
@@ -126,6 +126,7 @@ void DataPollHandler::RequestFrameChange(FrameChange aChange, Child &aChild)
     }
 }
 
+#if OPENTHREAD_FTD
 void DataPollHandler::HandleDataPoll(Mac::RxFrame &aFrame)
 {
     Mac::Address macSource;
@@ -173,6 +174,30 @@ void DataPollHandler::HandleDataPoll(Mac::RxFrame &aFrame)
 exit:
     return;
 }
+#endif
+
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+void DataPollHandler::HandleEnhDataPoll(IndirectReachable &aNeighbor)
+{
+    if (aNeighbor.GetIndirectMessageCount() == 0)
+    {
+        ExitNow();
+    }
+
+    if (mIndirectTxChild == nullptr)
+    {
+        mIndirectTxChild = &aNeighbor;
+        Get<Mac::Mac>().RequestIndirectFrameTransmission();
+    }
+    else
+    {
+        aNeighbor.SetDataPollPending(true);
+    }
+
+exit:
+    return;
+}
+#endif
 
 Mac::TxFrame *DataPollHandler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
 {
@@ -219,7 +244,7 @@ exit:
 
 void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError)
 {
-    Child *child = mIndirectTxChild;
+    IndirectReachable *child = mIndirectTxChild;
 
     VerifyOrExit(child != nullptr);
 
@@ -230,7 +255,7 @@ exit:
     ProcessPendingPolls();
 }
 
-void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, Child &aChild)
+void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, IndirectReachable &aChild)
 {
     if (aChild.IsFramePurgePending())
     {
@@ -328,7 +353,7 @@ void DataPollHandler::ProcessPendingPolls(void)
     }
 }
 
-void DataPollHandler::ResetTxAttempts(Child &aChild)
+void DataPollHandler::ResetTxAttempts(IndirectReachable &aChild)
 {
     aChild.ResetIndirectTxAttempts();
 

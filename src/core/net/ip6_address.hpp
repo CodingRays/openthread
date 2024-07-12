@@ -728,6 +728,12 @@ public:
      */
     void SetToLinkLocalAllRoutersMulticast(void);
 
+#if OPENTHREAD_MTD && OPENTHREAD_CONFIG_CHILD_NETWORK_ENABLE
+    bool IsLinkLocalAllSubChildrenMulticast(void) const;
+
+    void SetToLinkLocalAllSubChildrenMulticast(void);
+#endif
+
     /**
      * Indicates whether or not the IPv6 address is a realm-local multicast address.
      *
@@ -1068,6 +1074,7 @@ private:
 
     static const Address &GetLinkLocalAllNodesMulticast(void);
     static const Address &GetLinkLocalAllRoutersMulticast(void);
+    static const Address &GetLinkLocalAllSubChildrenMulticast(void);
     static const Address &GetRealmLocalAllNodesMulticast(void);
     static const Address &GetRealmLocalAllRoutersMulticast(void);
     static const Address &GetRealmLocalAllMplForwarders(void);
