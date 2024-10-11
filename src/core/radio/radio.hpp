@@ -508,6 +508,20 @@ public:
      */
     Error EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
 
+    Error EnableMultiCsl(uint32_t aCslPeriod);
+
+    Error AddCslShortEntry(otShortAddress aShortAddr);
+
+    Error AddCslExtEntry(const otExtAddress *aExtAddr);
+
+    Error ClearCslShortEntry(otShortAddress aShortAddr);
+
+    Error ClearCslExtEntry(const otExtAddress *aExtAddr);
+
+    Error ClearCslShortEntries(void);
+
+    Error ClearCslExtEntries(void);
+
     /**
      * Resets CSL receiver in radio.
      *
@@ -915,6 +929,41 @@ inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDurat
 inline Error Radio::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
 {
     return otPlatRadioEnableCsl(GetInstancePtr(), aCslPeriod, aShortAddr, aExtAddr);
+}
+
+inline Error Radio::EnableMultiCsl(uint32_t aCslPeriod)
+{
+    return otPlatRadioEnableMultiCsl(GetInstancePtr(), aCslPeriod);
+}
+
+inline Error Radio::AddCslShortEntry(otShortAddress aShortAddr)
+{
+    return otPlatRadioAddCslShortEntry(GetInstancePtr(), aShortAddr);
+}
+
+inline Error Radio::AddCslExtEntry(const otExtAddress *aExtAddr)
+{
+    return otPlatRadioAddCslExtEntry(GetInstancePtr(), aExtAddr);
+}
+
+inline Error Radio::ClearCslShortEntry(otShortAddress aShortAddr)
+{
+    return otPlatRadioClearCslShortEntry(GetInstancePtr(), aShortAddr);
+}
+
+inline Error Radio::ClearCslExtEntry(const otExtAddress *aExtAddr)
+{
+    return otPlatRadioClearCslExtEntry(GetInstancePtr(), aExtAddr);
+}
+
+inline Error Radio::ClearCslShortEntries(void)
+{
+    return otPlatRadioClearCslShortEntries(GetInstancePtr());
+}
+
+inline Error Radio::ClearCslExtEntries(void)
+{
+    return otPlatRadioClearCslExtEntries(GetInstancePtr());
 }
 
 inline Error Radio::ResetCsl(void) { return otPlatRadioResetCsl(GetInstancePtr()); }

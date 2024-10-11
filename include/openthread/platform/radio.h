@@ -1106,6 +1106,7 @@ otError otPlatRadioGetCoexMetrics(otInstance *aInstance, otRadioCoexMetrics *aCo
  * @param[in]  aExtAddr      The extended source address of CSL receiver's peer.
  *
  * @note Platforms should use CSL peer addresses to include CSL IE when generating enhanced acks.
+ * @note Deprecated by `otPlatRadioEnableMultiCsl`. Platforms may still implement this function for backwards compatibility. In that case they may expect that if this function is used no multi csl functions will be used.
  *
  * @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support CSL.
  * @retval  OT_ERROR_FAILED          Other platform specific errors.
@@ -1116,10 +1117,66 @@ otError otPlatRadioEnableCsl(otInstance         *aInstance,
                              otShortAddress      aShortAddr,
                              const otExtAddress *aExtAddr);
 
+otError otPlatRadioEnableMultiCsl(otInstance *aInstance, uint32_t aCslPeriod);
+
+/**
+ * Add a short address to the list of CSL peer addresses.
+ *
+ * @param[in]  aInstance      The OpenThread instance structure.
+ * @param[in]  aShortAddress  The short address of the CSL peer.
+ *
+ * @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support multiple CSL neighbors.
+ * @retval  OT_ERROR_NO_BUFS         No available entry in the table.
+ * @retval  OT_ERROR_NONE            Successfully added short address.
+ */
+otError otPlatRadioAddCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress);
+
+/**
+ * Add a extended address to the list of CSL peer addresses.
+ *
+ * @param[in]  aInstance    The OpenThread instance structure.
+ * @param[in]  aExtAddress  The extended address to be added.
+ *
+ * @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support multiple CSL neighbors.
+ * @retval  OT_ERROR_NO_BUFS         No available entry in the table.
+ * @retval  OT_ERROR_NONE            Successfully added extended address.
+ */
+otError otPlatRadioAddCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress);
+
+/**
+ * Remove a short address from the list of CSL peer addresses.
+ *
+ * @param[in]  aInstance      The OpenThread instance structure.
+ * @param[in]  aShortAddress  The short address of the CSL peer.
+ *
+ * @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support multiple CSL neighbors.
+ * @retval  OT_ERROR_NO_ADDRESS      The short address is not in the CSL peer address table.
+ * @retval  OT_ERROR_NONE            Successfully removed short address.
+ */
+otError otPlatRadioClearCslShortEntry(otInstance *aInstance, otShortAddress aShortAddress);
+
+/**
+ * Remove a extended address from the list of CSL peer addresses.
+ *
+ * @param[in]  aInstance    The OpenThread instance structure.
+ * @param[in]  aExtAddress  The extended address of the CSL peer.
+ *
+ * @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support multiple CSL neighbors.
+ * @retval  OT_ERROR_NO_ADDRESS      The extended address is not in the CSL peer address table.
+ * @retval  OT_ERROR_NONE            Successfully removed extended address.
+ */
+otError otPlatRadioClearCslExtEntry(otInstance *aInstance, const otExtAddress *aExtAddress);
+
+otError otPlatRadioClearCslShortEntries(otInstance *aInstance);
+
+otError otPlatRadioClearCslExtEntries(otInstance *aInstance);
+
 /**
  * Reset CSL receiver in the platform.
  *
- * @note Defaults to `otPlatRadioEnableCsl(aInstance,0, Mac::kShortAddrInvalid, nullptr);`
+ * @note Defaults to `otPlatRadioEnableCsl(aInstance,0, Mac::kShortAddrInvalid, nullptr);`.
+ *       If the OPENTHREAD_CONFIG_PLATFORM_RADIO_MULTI_CSL feature is enabled additionally
+ *       clears all short and ext entries.
  *
  * @param[in]  aInstance     The OpenThread instance structure.
  *
