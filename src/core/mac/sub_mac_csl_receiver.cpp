@@ -42,24 +42,77 @@ namespace Mac {
 
 RegisterLogModule("SubMac");
 
+void SubMac::CslNeighbor::Init(void)
+{
+    mShortAddr = kShortAddrInvalid;
+    mExtAddrPresent = false;
+}
+
+uint32_t SubMac::CslNeighbor::GetSemiWindow(uint32_t aCurrentTime, uint32_t aOurAccuracy, uint32_t aOurUncertainty)
+{
+    uint32_t elapsed = aCurrentTime - mCslLastSync.GetValue();
+    uint32_t semiWindow = 0;
+
+    VerifyOrExit(IsValid());
+
+    semiWindow = static_cast<uint32_t>(static_cast<uint64_t>(elapsed) * (aOurAccuracy + mCslAccuracy.GetClockAccuracy()) / 1000000);
+    semiWindow += aOurUncertainty + mCslAccuracy.GetUncertaintyInMicrosec();
+
+exit:
+    return semiWindow;
+}
+
 void SubMac::CslInit(void)
 {
     mCslPeriod     = 0;
     mCslChannel    = 0;
-    mCslPeerShort  = 0;
     mIsCslSampling = false;
     mCslSampleTime = TimeMicro{0};
-    mCslLastSync   = TimeMicro{0};
     mCslTimer.Stop();
+
+    for (CslNeighbor &neighbor : mCslNeighbors)
+    {
+        neighbor.Init();
+    }
+}
+
+void SubMac::UpdateCslNeighbors(void)
+{
+#if OPENTHREAD_CONFIG_PLATFORM_RADIO_MULTI_CSL
+    IgnoreError(Get<Radio>().ClearCslShortEntries());
+    IgnoreError(Get<Radio>().ClearCslExtEntries());
+    for (CslNeighbor &neighbor : mCslNeighbors)
+    {
+        if (neighbor.mShortAddr != kShortAddrInvalid)
+        {
+            IgnoreError(Get<Radio>().AddCslShortEntry(neighbor.mShortAddr));
+        }
+        if (neighbor.mExtAddrPresent)
+        {
+            IgnoreError(Get<Radio>().AddCslExtEntry(&neighbor.mExtAddr));
+        }
+    }
+#else
+    if (mCslNeighbors[0].mExtAddrPresent)
+    {
+        IgnoreError(Get<Radio>().EnableCsl(mCslPeriod, mCslNeighbors[0].mShortAddr, &mCslNeighbors[0].mExtAddr));
+    }
+    else
+    {
+        IgnoreError(Get<Radio>().EnableCsl(mCslPeriod, mCslNeighbors[0].mShortAddr, nullptr));
+    }
+#endif
 }
 
 void SubMac::UpdateCslLastSyncTimestamp(TxFrame &aFrame, RxFrame *aAckFrame)
 {
+    TimeMicro lastSync = TimeMicro(GetLocalTime());
+
     // Actual synchronization timestamp should be from the sent frame instead of the current time.
     // Assuming the error here since it is bounded and has very small effect on the final window duration.
     if (aAckFrame != nullptr && aFrame.HasCslIe())
     {
-        mCslLastSync = TimeMicro(GetLocalTime());
+        mCslNeighbors[0].mCslLastSync = lastSync;
     }
 }
 
@@ -75,9 +128,9 @@ void SubMac::UpdateCslLastSyncTimestamp(RxFrame *aFrame, Error aError)
     if ((mCslPeriod > 0) && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck)
     {
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
-        mCslLastSync = TimerMicro::GetNow();
+        mCslNeighbors[0].mCslLastSync = TimerMicro::GetNow();
 #else
-        mCslLastSync = TimeMicro(static_cast<uint32_t>(aFrame->mInfo.mRxInfo.mTimestamp));
+        mCslNeighbors[0].mCslLastSync = TimeMicro(static_cast<uint32_t>(aFrame->mInfo.mRxInfo.mTimestamp));
 #endif
     }
 
@@ -111,25 +164,23 @@ bool SubMac::UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShort
 {
     bool diffPeriod  = aPeriod != mCslPeriod;
     bool diffChannel = aChannel != mCslChannel;
-    bool diffPeer    = aShortAddr != mCslPeerShort;
+    bool diffPeer    = aShortAddr != mCslNeighbors[0].mShortAddr;
     bool retval      = diffPeriod || diffChannel || diffPeer;
+
+    OT_UNUSED_VARIABLE(aExtAddr);
 
     VerifyOrExit(retval);
     mCslChannel = aChannel;
 
     VerifyOrExit(diffPeriod || diffPeer);
     mCslPeriod    = aPeriod;
-    mCslPeerShort = aShortAddr;
+
+    mCslNeighbors[0].mShortAddr = aShortAddr;
 
 #if OPENTHREAD_CONFIG_PLATFORM_RADIO_MULTI_CSL
     IgnoreError(Get<Radio>().EnableCsl(aPeriod));
-    IgnoreError(Get<Radio>().ClearCslShortEntries());
-    IgnoreError(Get<Radio>().ClearCslExtEntries());
-    IgnoreError(Get<Radio>().AddCslShortEntry(aShortAddr));
-    IgnoreError(Get<Radio>().AddCslExtEntry(aExtAddr));
-#else
-    IgnoreError(Get<Radio>().EnableCsl(aPeriod, aShortAddr, aExtAddr));
 #endif
+    UpdateCslNeighbors();
 
     mCslTimer.Stop();
     if (mCslPeriod > 0)
@@ -236,15 +287,15 @@ void SubMac::HandleCslTimer(void)
 void SubMac::GetCslWindowEdges(uint32_t &aAhead, uint32_t &aAfter)
 {
     uint32_t semiPeriod = mCslPeriod * kUsPerTenSymbols / 2;
-    uint32_t curTime, elapsed, semiWindow;
+    uint32_t ourAccuracy = Get<Radio>().GetCslAccuracy() * 10;
+    uint32_t ourUncertainty = Get<Radio>().GetCslUncertainty(); 
+    uint32_t curTime = GetLocalTime();
+    uint32_t semiWindow = 0;
 
-    curTime = GetLocalTime();
-    elapsed = curTime - mCslLastSync.GetValue();
-
-    semiWindow =
-        static_cast<uint32_t>(static_cast<uint64_t>(elapsed) *
-                              (Get<Radio>().GetCslAccuracy() + mCslParentAccuracy.GetClockAccuracy()) / 1000000);
-    semiWindow += mCslParentAccuracy.GetUncertaintyInMicrosec() + Get<Radio>().GetCslUncertainty() * 10;
+    for (CslNeighbor &neighbor : mCslNeighbors)
+    {
+        semiWindow = Max(semiWindow, neighbor.GetSemiWindow(curTime, ourAccuracy, ourUncertainty));
+    }
 
     aAhead = Min(semiPeriod, semiWindow + kMinReceiveOnAhead + kCslReceiveTimeAhead);
     aAfter = Min(semiPeriod, semiWindow + kMinReceiveOnAfter);

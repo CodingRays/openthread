@@ -374,6 +374,14 @@ public:
      */
     bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
 
+    void SetCslShortAddress(uint16_t aIndex, otShortAddress aShortAddr);
+
+    void ClearCslShortAddress(uint16_t aIndex);
+
+    void SetCslExtAddress(uint16_t aIndex, const otExtAddress *aExtAddr);
+
+    void ClearCslExtAddress(uint16_t aIndex);
+
     /**
      * Lets `SubMac` start CSL sample mode given a configured non-zero CSL period.
      *
@@ -386,14 +394,14 @@ public:
      *
      * @returns The parent CSL accuracy.
      */
-    const CslAccuracy &GetCslParentAccuracy(void) const { return mCslParentAccuracy; }
+    const CslAccuracy &GetCslParentAccuracy(void) const { return mCslNeighbors[0].mCslAccuracy; }
 
     /**
      * Sets parent CSL accuracy.
      *
      * @param[in] aCslAccuracy  The parent CSL accuracy.
      */
-    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy) { mCslParentAccuracy = aCslAccuracy; }
+    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy) { mCslNeighbors[0].mCslAccuracy = aCslAccuracy; }
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
@@ -482,7 +490,27 @@ public:
 
 private:
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    static constexpr uint32_t kCslMaxNeighbors = 1;
+
+    struct CslNeighbor
+    {
+        CslAccuracy mCslAccuracy;
+        TimeMicro   mCslLastSync;
+
+        otShortAddress mShortAddr;
+        otExtAddress   mExtAddr;
+        bool           mExtAddrPresent;
+
+        void Init(void);
+
+        inline bool IsValid(void) { return (mShortAddr != kShortAddrInvalid) || mExtAddrPresent; }
+
+        // Calculates the required semi window for this neighbor or 0 if the neighbor is invalid.
+        uint32_t GetSemiWindow(uint32_t aCurrentTime, uint32_t aOurAccuracy, uint32_t aOurUncertainty);
+    };
+
     void        CslInit(void);
+    void        UpdateCslNeighbors(void);
     void        UpdateCslLastSyncTimestamp(TxFrame &aFrame, RxFrame *aAckFrame);
     void        UpdateCslLastSyncTimestamp(RxFrame *aFrame, Error aError);
     static void HandleCslTimer(Timer &aTimer);
@@ -629,11 +657,10 @@ private:
     uint8_t  mCslChannel : 7;       // The CSL sample channel.
     bool     mIsCslSampling : 1;    // Indicates that the radio is receiving in CSL state for platforms not supporting
                                     // delayed reception.
-    uint16_t    mCslPeerShort;      // The CSL peer short address.
     TimeMicro   mCslSampleTime;     // The CSL sample time of the current period relative to the local radio clock.
-    TimeMicro   mCslLastSync;       // The timestamp of the last successful CSL synchronization.
-    CslAccuracy mCslParentAccuracy; // The parent's CSL accuracy (clock accuracy and uncertainty).
     TimerMicro  mCslTimer;
+
+    CslNeighbor mCslNeighbors[kCslMaxNeighbors];
 #endif
 };
 
