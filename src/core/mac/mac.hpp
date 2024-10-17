@@ -613,21 +613,14 @@ public:
      */
     bool IsCslSupported(void) const;
 
-    /**
-     * Returns parent CSL accuracy (clock accuracy and uncertainty).
-     *
-     * @returns The parent CSL accuracy.
-     */
-    const CslAccuracy &GetCslParentAccuracy(void) const { return mLinks.GetSubMac().GetCslParentAccuracy(); }
-
-    /**
-     * Sets parent CSL accuracy.
-     *
-     * @param[in] aCslAccuracy  The parent CSL accuracy.
-     */
-    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy)
+    void ConfigureCslNeighbor(uint16_t aIndex, otShortAddress aShortAddr, otExtAddress &aExtAddr, CslAccuracy aCslAccuracy)
     {
-        mLinks.GetSubMac().SetCslParentAccuracy(aCslAccuracy);
+        mLinks.GetSubMac().ConfigureCslNeighbor(aIndex, aShortAddr, aExtAddr, aCslAccuracy);
+    }
+
+    void ClearCslNeighbor(uint16_t aIndex)
+    {
+        mLinks.GetSubMac().ClearCslNeighbor(aIndex);
     }
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 

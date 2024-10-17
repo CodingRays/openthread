@@ -372,15 +372,11 @@ public:
      * @retval  TRUE if CSL Period or CSL Channel changed.
      * @retval  FALSE if CSL Period and CSL Channel did not change.
      */
-    bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
+    bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel);
 
-    void SetCslShortAddress(uint16_t aIndex, otShortAddress aShortAddr);
+    void ConfigureCslNeighbor(uint16_t aIndex, otShortAddress aShortAddr, const otExtAddress &aExtAddr, CslAccuracy aCslAccuracy);
 
-    void ClearCslShortAddress(uint16_t aIndex);
-
-    void SetCslExtAddress(uint16_t aIndex, const otExtAddress *aExtAddr);
-
-    void ClearCslExtAddress(uint16_t aIndex);
+    void ClearCslNeighbor(uint16_t aIndex);
 
     /**
      * Lets `SubMac` start CSL sample mode given a configured non-zero CSL period.
@@ -497,13 +493,13 @@ private:
         CslAccuracy mCslAccuracy;
         TimeMicro   mCslLastSync;
 
-        otShortAddress mShortAddr;
-        otExtAddress   mExtAddr;
-        bool           mExtAddrPresent;
+        otShortAddress mShortAddr;  ///< The neighbor short address. May be invalid.
+        otExtAddress   mExtAddr;    ///< The neighbor ext address. Must be valid.
+        bool           mValid;      ///< If false all fields are undefined.
 
         void Init(void);
 
-        inline bool IsValid(void) { return (mShortAddr != kShortAddrInvalid) || mExtAddrPresent; }
+        inline bool IsValid(void) { return mValid; }
 
         // Calculates the required semi window for this neighbor or 0 if the neighbor is invalid.
         uint32_t GetSemiWindow(uint32_t aCurrentTime, uint32_t aOurAccuracy, uint32_t aOurUncertainty);
