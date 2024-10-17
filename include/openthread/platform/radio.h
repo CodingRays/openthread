@@ -1117,6 +1117,17 @@ otError otPlatRadioEnableCsl(otInstance         *aInstance,
                              otShortAddress      aShortAddr,
                              const otExtAddress *aExtAddr);
 
+/**
+ * Returns the maximum number of csl neighbors supported.
+ *
+ * If the multi csl api is not implemented returns 0.
+ *
+ * @param[in]  aInstance   The OpenThread instance structure.
+ *
+ * @retval  The number of supported csl neighbors.
+ */
+uint32_t otPlatRadioGetMaxMultiCslNeighbors(otInstance *aInstance);
+
 otError otPlatRadioEnableMultiCsl(otInstance *aInstance, uint32_t aCslPeriod);
 
 /**
@@ -1175,8 +1186,7 @@ otError otPlatRadioClearCslExtEntries(otInstance *aInstance);
  * Reset CSL receiver in the platform.
  *
  * @note Defaults to `otPlatRadioEnableCsl(aInstance,0, Mac::kShortAddrInvalid, nullptr);`.
- *       If the OPENTHREAD_CONFIG_PLATFORM_RADIO_MULTI_CSL feature is enabled additionally
- *       clears all short and ext entries.
+ *       If multi csl is supporteed also clears all short and ext entries.
  *
  * @param[in]  aInstance     The OpenThread instance structure.
  *

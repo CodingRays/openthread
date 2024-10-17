@@ -613,6 +613,11 @@ public:
      */
     bool IsCslSupported(void) const;
 
+    uint8_t GetMaxCslNeighbors(void) const
+    {
+        return mLinks.GetSubMac().GetMaxCslNeighbors();
+    }
+
     void ConfigureCslNeighbor(uint16_t aIndex, otShortAddress aShortAddr, otExtAddress &aExtAddr, CslAccuracy aCslAccuracy)
     {
         mLinks.GetSubMac().ConfigureCslNeighbor(aIndex, aShortAddr, aExtAddr, aCslAccuracy);

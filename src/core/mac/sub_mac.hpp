@@ -374,6 +374,8 @@ public:
      */
     bool UpdateCsl(uint16_t aPeriod, uint8_t aChannel);
 
+    uint8_t GetMaxCslNeighbors(void) const { return mMaxCslNeighbors; }
+
     void ConfigureCslNeighbor(uint16_t aIndex, otShortAddress aShortAddr, const otExtAddress &aExtAddr, CslAccuracy aCslAccuracy);
 
     void ClearCslNeighbor(uint16_t aIndex);
@@ -653,6 +655,9 @@ private:
     uint8_t  mCslChannel : 7;       // The CSL sample channel.
     bool     mIsCslSampling : 1;    // Indicates that the radio is receiving in CSL state for platforms not supporting
                                     // delayed reception.
+    uint8_t  mMaxCslNeighbors : 7;  // The maximum number of used csl neighbors
+    bool     mMultiCsl : 1;         // If true we are using the multi csl api
+
     TimeMicro   mCslSampleTime;     // The CSL sample time of the current period relative to the local radio clock.
     TimerMicro  mCslTimer;
 

@@ -508,6 +508,8 @@ public:
      */
     Error EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr);
 
+    uint32_t GetMaxMultiCslNeighbors(void);
+
     Error EnableMultiCsl(uint32_t aCslPeriod);
 
     Error AddCslShortEntry(otShortAddress aShortAddr);
@@ -929,6 +931,11 @@ inline Error Radio::ReceiveAt(uint8_t aChannel, uint32_t aStart, uint32_t aDurat
 inline Error Radio::EnableCsl(uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
 {
     return otPlatRadioEnableCsl(GetInstancePtr(), aCslPeriod, aShortAddr, aExtAddr);
+}
+
+inline uint32_t Radio::GetMaxMultiCslNeighbors(void)
+{
+    return otPlatRadioGetMaxMultiCslNeighbors(GetInstancePtr());
 }
 
 inline Error Radio::EnableMultiCsl(uint32_t aCslPeriod)
