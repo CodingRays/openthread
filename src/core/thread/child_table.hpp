@@ -117,6 +117,12 @@ public:
      */
     uint16_t GetChildIndex(const Child &aChild) const { return static_cast<uint16_t>(&aChild - mChildren); }
 
+    bool IsChild(const IndirectNeighbor &aNeighbor) const
+    { 
+        OT_UNUSED_VARIABLE(aNeighbor);
+        return true; 
+    }
+
     /**
      * Returns a pointer to a `Child` entry at a given index, or `nullptr` if the index is out of bounds,
      * i.e., index is larger or equal to maximum number of children allowed (@sa GetMaxChildrenAllowed()).

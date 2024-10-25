@@ -50,13 +50,7 @@ namespace ot {
 /**
  * Represents a Thread Child.
  */
-class Child : public Neighbor,
-              public IndirectSender::ChildInfo,
-              public DataPollHandler::ChildInfo
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-    ,
-              public CslTxScheduler::ChildInfo
-#endif
+class Child : public IndirectNeighbor
 {
 public:
     static constexpr uint8_t kMaxRequestTlvs = 6;
@@ -311,37 +305,6 @@ public:
      */
     void SetRequestTlv(uint8_t aIndex, uint8_t aType) { mRequestTlvs[aIndex] = aType; }
 
-    /**
-     * Returns the supervision interval (in seconds).
-     *
-     * @returns The supervision interval (in seconds).
-     */
-    uint16_t GetSupervisionInterval(void) const { return mSupervisionInterval; }
-
-    /**
-     * Sets the supervision interval.
-     *
-     * @param[in] aInterval  The supervision interval (in seconds).
-     */
-    void SetSupervisionInterval(uint16_t aInterval) { mSupervisionInterval = aInterval; }
-
-    /**
-     * Increments the number of seconds since last supervision of the child.
-     */
-    void IncrementSecondsSinceLastSupervision(void) { mSecondsSinceSupervision++; }
-
-    /**
-     * Returns the number of seconds since last supervision of the child (last message to the child)
-     *
-     * @returns Number of seconds since last supervision of the child.
-     */
-    uint16_t GetSecondsSinceLastSupervision(void) const { return mSecondsSinceSupervision; }
-
-    /**
-     * Resets the number of seconds since last supervision of the child to zero.
-     */
-    void ResetSecondsSinceLastSupervision(void) { mSecondsSinceSupervision = 0; }
-
 #if OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE
     /**
      * Returns if the Child has IPv6 address @p aAddress of MLR state `kMlrStateRegistered`.
@@ -389,9 +352,6 @@ private:
         uint8_t          mRequestTlvs[kMaxRequestTlvs];
         Mle::TxChallenge mAttachChallenge;
     };
-
-    uint16_t mSupervisionInterval;
-    uint16_t mSecondsSinceSupervision;
 
     static_assert(OPENTHREAD_CONFIG_NUM_MESSAGE_BUFFERS < 8192, "mQueuedMessageCount cannot fit max required!");
 };

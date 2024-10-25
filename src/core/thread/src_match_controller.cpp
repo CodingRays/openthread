@@ -48,54 +48,54 @@ SourceMatchController::SourceMatchController(Instance &aInstance)
     ClearTable();
 }
 
-void SourceMatchController::IncrementMessageCount(Child &aChild)
+void SourceMatchController::IncrementMessageCount(IndirectNeighbor &aNeighbor)
 {
-    if (aChild.GetIndirectMessageCount() == 0)
+    if (aNeighbor.GetIndirectMessageCount() == 0)
     {
-        AddEntry(aChild);
+        AddEntry(aNeighbor);
     }
 
-    aChild.IncrementIndirectMessageCount();
+    aNeighbor.IncrementIndirectMessageCount();
 }
 
-void SourceMatchController::DecrementMessageCount(Child &aChild)
+void SourceMatchController::DecrementMessageCount(IndirectNeighbor &aNeighbor)
 {
-    if (aChild.GetIndirectMessageCount() == 0)
+    if (aNeighbor.GetIndirectMessageCount() == 0)
     {
-        LogWarn("DecrementMessageCount(child 0x%04x) called when already at zero count.", aChild.GetRloc16());
+        LogWarn("DecrementMessageCount(neighbor 0x%04x) called when already at zero count.", aNeighbor.GetRloc16());
         ExitNow();
     }
 
-    aChild.DecrementIndirectMessageCount();
+    aNeighbor.DecrementIndirectMessageCount();
 
-    if (aChild.GetIndirectMessageCount() == 0)
+    if (aNeighbor.GetIndirectMessageCount() == 0)
     {
-        ClearEntry(aChild);
+        ClearEntry(aNeighbor);
     }
 
 exit:
     return;
 }
 
-void SourceMatchController::ResetMessageCount(Child &aChild)
+void SourceMatchController::ResetMessageCount(IndirectNeighbor &aNeighbor)
 {
-    aChild.ResetIndirectMessageCount();
-    ClearEntry(aChild);
+    aNeighbor.ResetIndirectMessageCount();
+    ClearEntry(aNeighbor);
 }
 
-void SourceMatchController::SetSrcMatchAsShort(Child &aChild, bool aUseShortAddress)
+void SourceMatchController::SetSrcMatchAsShort(IndirectNeighbor &aNeighbor, bool aUseShortAddress)
 {
-    VerifyOrExit(aChild.IsIndirectSourceMatchShort() != aUseShortAddress);
+    VerifyOrExit(aNeighbor.IsIndirectSourceMatchShort() != aUseShortAddress);
 
-    if (aChild.GetIndirectMessageCount() > 0)
+    if (aNeighbor.GetIndirectMessageCount() > 0)
     {
-        ClearEntry(aChild);
-        aChild.SetIndirectSourceMatchShort(aUseShortAddress);
-        AddEntry(aChild);
+        ClearEntry(aNeighbor);
+        aNeighbor.SetIndirectSourceMatchShort(aUseShortAddress);
+        AddEntry(aNeighbor);
     }
     else
     {
-        aChild.SetIndirectSourceMatchShort(aUseShortAddress);
+        aNeighbor.SetIndirectSourceMatchShort(aUseShortAddress);
     }
 
 exit:
@@ -116,9 +116,9 @@ void SourceMatchController::Enable(bool aEnable)
     LogDebg("%sabling", mEnabled ? "En" : "Dis");
 }
 
-void SourceMatchController::AddEntry(Child &aChild)
+void SourceMatchController::AddEntry(IndirectNeighbor &aNeighbor)
 {
-    aChild.SetIndirectSourceMatchPending(true);
+    aNeighbor.SetIndirectSourceMatchPending(true);
 
     if (!IsEnabled())
     {
@@ -127,63 +127,63 @@ void SourceMatchController::AddEntry(Child &aChild)
     }
     else
     {
-        VerifyOrExit(AddAddress(aChild) == kErrorNone, Enable(false));
-        aChild.SetIndirectSourceMatchPending(false);
+        VerifyOrExit(AddAddress(aNeighbor) == kErrorNone, Enable(false));
+        aNeighbor.SetIndirectSourceMatchPending(false);
     }
 
 exit:
     return;
 }
 
-Error SourceMatchController::AddAddress(const Child &aChild)
+Error SourceMatchController::AddAddress(const IndirectNeighbor &aNeighbor)
 {
     Error error = kErrorNone;
 
-    if (aChild.IsIndirectSourceMatchShort())
+    if (aNeighbor.IsIndirectSourceMatchShort())
     {
-        error = Get<Radio>().AddSrcMatchShortEntry(aChild.GetRloc16());
+        error = Get<Radio>().AddSrcMatchShortEntry(aNeighbor.GetRloc16());
 
-        LogDebg("Adding short addr: 0x%04x -- %s (%d)", aChild.GetRloc16(), ErrorToString(error), error);
+        LogDebg("Adding short addr: 0x%04x -- %s (%d)", aNeighbor.GetRloc16(), ErrorToString(error), error);
     }
     else
     {
         Mac::ExtAddress address;
 
-        address.Set(aChild.GetExtAddress().m8, Mac::ExtAddress::kReverseByteOrder);
+        address.Set(aNeighbor.GetExtAddress().m8, Mac::ExtAddress::kReverseByteOrder);
         error = Get<Radio>().AddSrcMatchExtEntry(address);
 
-        LogDebg("Adding addr: %s -- %s (%d)", aChild.GetExtAddress().ToString().AsCString(), ErrorToString(error),
+        LogDebg("Adding addr: %s -- %s (%d)", aNeighbor.GetExtAddress().ToString().AsCString(), ErrorToString(error),
                 error);
     }
 
     return error;
 }
 
-void SourceMatchController::ClearEntry(Child &aChild)
+void SourceMatchController::ClearEntry(IndirectNeighbor &aNeighbor)
 {
     Error error = kErrorNone;
 
-    if (aChild.IsIndirectSourceMatchPending())
+    if (aNeighbor.IsIndirectSourceMatchPending())
     {
-        LogDebg("Clearing pending flag for 0x%04x", aChild.GetRloc16());
-        aChild.SetIndirectSourceMatchPending(false);
+        LogDebg("Clearing pending flag for 0x%04x", aNeighbor.GetRloc16());
+        aNeighbor.SetIndirectSourceMatchPending(false);
         ExitNow();
     }
 
-    if (aChild.IsIndirectSourceMatchShort())
+    if (aNeighbor.IsIndirectSourceMatchShort())
     {
-        error = Get<Radio>().ClearSrcMatchShortEntry(aChild.GetRloc16());
+        error = Get<Radio>().ClearSrcMatchShortEntry(aNeighbor.GetRloc16());
 
-        LogDebg("Clearing short addr: 0x%04x -- %s (%d)", aChild.GetRloc16(), ErrorToString(error), error);
+        LogDebg("Clearing short addr: 0x%04x -- %s (%d)", aNeighbor.GetRloc16(), ErrorToString(error), error);
     }
     else
     {
         Mac::ExtAddress address;
 
-        address.Set(aChild.GetExtAddress().m8, Mac::ExtAddress::kReverseByteOrder);
+        address.Set(aNeighbor.GetExtAddress().m8, Mac::ExtAddress::kReverseByteOrder);
         error = Get<Radio>().ClearSrcMatchExtEntry(address);
 
-        LogDebg("Clearing addr: %s -- %s (%d)", aChild.GetExtAddress().ToString().AsCString(), ErrorToString(error),
+        LogDebg("Clearing addr: %s -- %s (%d)", aNeighbor.GetExtAddress().ToString().AsCString(), ErrorToString(error),
                 error);
     }
 

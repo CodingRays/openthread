@@ -155,6 +155,17 @@ public:
 #if OPENTHREAD_FTD
 
     /**
+     * Searches in the neighbor table to find a `IndirectNeighbor` object corresponding to a given MAC address.
+     *
+     * @param[in]  aMacAddress  A MAC address.
+     * @param[in]  aFilter      A neighbor state filter.
+     *
+     * @returns A pointer to the `IndirectNeighbor` corresponding to @p aMacAddress, `nullptr` otherwise.
+     */
+    IndirectNeighbor *FindIndirectNeighbor(const Mac::Address &aMacAddress,
+                                           Neighbor::StateFilter aFilter = Neighbor::kInStateValidOrRestoring);
+
+    /**
      * Searches in the neighbor table to find a `Neighbor` object corresponding to a given IPv6 address.
      *
      * @param[in]  aIp6Address  An IPv6 address.

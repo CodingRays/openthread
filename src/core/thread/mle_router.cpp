@@ -2812,7 +2812,7 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
 
     if (!aChild.IsRxOnWhenIdle())
     {
-        Get<IndirectSender>().SetChildUseShortAddress(aChild, false);
+        Get<IndirectSender>().SetNeighborUseShortAddress(aChild, false);
     }
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
@@ -2846,7 +2846,7 @@ Error MleRouter::SendChildUpdateRequest(Child &aChild)
         // to the sleepy child if there is one already
         // queued.
 
-        VerifyOrExit(!Get<IndirectSender>().HasQueuedMessageForSleepyChild(aChild, IsMessageChildUpdateRequest));
+        VerifyOrExit(!Get<IndirectSender>().HasQueuedIndirectMessageForNeighbor(aChild, IsMessageChildUpdateRequest));
     }
 
     Get<MeshForwarder>().RemoveMessagesForChild(aChild, IsMessageChildUpdateRequest);
@@ -3123,7 +3123,7 @@ void MleRouter::RemoveNeighbor(Neighbor &aNeighbor)
             mNeighborTable.Signal(NeighborTable::kChildRemoved, aNeighbor);
         }
 
-        Get<IndirectSender>().ClearAllMessagesForSleepyChild(static_cast<Child &>(aNeighbor));
+        Get<IndirectSender>().ClearAllIndirectMessagesForNeighbor(static_cast<Child &>(aNeighbor));
 
         if (aNeighbor.IsFullThreadDevice())
         {

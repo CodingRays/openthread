@@ -59,6 +59,7 @@ namespace ot {
  * @{
  */
 
+class IndirectNeighbor;
 class Child;
 
 /**
@@ -74,11 +75,11 @@ class IndirectSender : public InstanceLocator, public IndirectSenderBase, privat
 
 public:
     /**
-     * Defines all the child info required for indirect transmission.
+     * Defines all the neighbor info required for indirect transmission.
      *
-     * `Child` class publicly inherits from this class.
+     * `IndirectNeighbor` class publicly inherits from this class.
      */
-    class ChildInfo
+    class NeighborInfo
     {
         friend class IndirectSender;
         friend class DataPollHandler;
@@ -87,9 +88,9 @@ public:
 
     public:
         /**
-         * Returns the number of queued messages for the child.
+         * Returns the number of queued messages for the neighbor.
          *
-         * @returns Number of queued messages for the child.
+         * @returns Number of queued messages for the neighbor.
          */
         uint16_t GetIndirectMessageCount(void) const { return mQueuedMessageCount; }
 
@@ -122,7 +123,7 @@ public:
         uint16_t mIndirectFragmentOffset : 14; // 6LoWPAN fragment offset for the indirect message.
         bool     mIndirectTxSuccess : 1;       // Indicates tx success/failure of current indirect message.
         bool     mWaitingForMessageUpdate : 1; // Indicates waiting for updating the indirect message.
-        uint16_t mQueuedMessageCount : 14;     // Number of queued indirect messages for the child.
+        uint16_t mQueuedMessageCount : 14;     // Number of queued indirect messages for the neighbor.
         bool     mUseShortAddress : 1;         // Indicates whether to use short or extended address.
         bool     mSourceMatchPending : 1;      // Indicates whether or not pending to add to src match table.
 
@@ -160,84 +161,84 @@ public:
     void Stop(void);
 
     /**
-     * Adds a message for indirect transmission to a sleepy child.
+     * Adds a message for indirect transmission to a neighbor.
      *
      * @param[in] aMessage  The message to add.
-     * @param[in] aChild    The (sleepy) child for indirect transmission.
+     * @param[in] aNeighbor The (sleepy) neighbor for indirect transmission.
      */
-    void AddMessageForSleepyChild(Message &aMessage, Child &aChild);
+    void AddIndirectMessageForNeighbor(Message &aMessage, IndirectNeighbor &aNeighbor);
 
     /**
-     * Removes a message for indirect transmission to a sleepy child.
+     * Removes a message for indirect transmission to a neighbor.
      *
      * @param[in] aMessage  The message to update.
-     * @param[in] aChild    The (sleepy) child for indirect transmission.
+     * @param[in] aNeighbor The (sleepy) neighbor for indirect transmission.
      *
      * @retval kErrorNone          Successfully removed the message for indirect transmission.
-     * @retval kErrorNotFound      The message was not scheduled for indirect transmission to the child.
+     * @retval kErrorNotFound      The message was not scheduled for indirect transmission to the neighbor.
      */
-    Error RemoveMessageFromSleepyChild(Message &aMessage, Child &aChild);
+    Error RemoveIndirectMessageFromNeighbor(Message &aMessage, IndirectNeighbor &aNeighbor);
 
     /**
-     * Removes all added messages for a specific child and frees message (with no indirect/direct tx).
+     * Removes all added messages for a specific neighbor and frees message (with no indirect/direct tx).
      *
-     * @param[in]  aChild  A reference to a child whose messages shall be removed.
+     * @param[in]  aNeighbor  A reference to a neighbor whose messages shall be removed.
      */
-    void ClearAllMessagesForSleepyChild(Child &aChild);
+    void ClearAllIndirectMessagesForNeighbor(IndirectNeighbor &aNeighbor);
 
     /**
-     * Finds the first queued message for a given sleepy child that also satisfies the conditions of a given
+     * Finds the first queued message for a given neighbor that also satisfies the conditions of a given
      * `MessageChecker`.
      *
-     * The caller MUST ensure that @p aChild is sleepy.
+     * The caller MUST ensure that @p aNeighbor is sleepy.
      *
-     * @param[in] aChild     The sleepy child to check.
+     * @param[in] aNeighbor  The neighbor to check.
      * @param[in] aChecker   The predicate function to apply.
      *
      * @returns A pointer to the matching queued message, or `nullptr` if none is found.
      */
-    Message *FindQueuedMessageForSleepyChild(const Child &aChild, MessageChecker aChecker)
+    Message *FindQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor, MessageChecker aChecker)
     {
-        return AsNonConst(AsConst(this)->FindQueuedMessageForSleepyChild(aChild, aChecker));
+        return AsNonConst(AsConst(this)->FindQueuedIndirectMessageForNeighbor(aNeighbor, aChecker));
     }
 
     /**
-     * Finds the first queued message for a given sleepy child that also satisfies the conditions of a given
+     * Finds the first queued message for a given neighbor that also satisfies the conditions of a given
      * `MessageChecker`.
      *
-     * The caller MUST ensure that @p aChild is sleepy.
+     * The caller MUST ensure that @p aNeighbor is sleepy.
      *
-     * @param[in] aChild     The sleepy child to check.
+     * @param[in] aNeighbor  The neighbor to check.
      * @param[in] aChecker   The predicate function to apply.
      *
      * @returns A pointer to the matching queued message, or `nullptr` if none is found.
      */
-    const Message *FindQueuedMessageForSleepyChild(const Child &aChild, MessageChecker aChecker) const;
+    const Message *FindQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor, MessageChecker aChecker) const;
 
     /**
-     * Indicates whether there is any queued message for a given sleepy child that also satisfies the conditions of a
+     * Indicates whether there is any queued message for a given neighbor that also satisfies the conditions of a
      * given `MessageChecker`.
      *
-     * The caller MUST ensure that @p aChild is sleepy.
+     * The caller MUST ensure that @p aNeighbor is sleepy.
      *
-     * @param[in] aChild    The sleepy child to check for.
+     * @param[in] aNeighbor The neighbor to check for.
      * @param[in] aChecker  The predicate function to apply.
      *
-     * @retval TRUE   There is a queued message satisfying @p aChecker for sleepy child @p aChild.
-     * @retval FALSE  There is no queued message satisfying @p aChecker for sleepy child @p aChild.
+     * @retval TRUE   There is a queued message satisfying @p aChecker for neighbor @p aNeighbor.
+     * @retval FALSE  There is no queued message satisfying @p aChecker for neighbor @p aNeighbor.
      */
-    bool HasQueuedMessageForSleepyChild(const Child &aChild, MessageChecker aChecker) const
+    bool HasQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor, MessageChecker aChecker) const
     {
-        return (FindQueuedMessageForSleepyChild(aChild, aChecker) != nullptr);
+        return (FindQueuedIndirectMessageForNeighbor(aNeighbor, aChecker) != nullptr);
     }
 
     /**
-     * Sets whether to use the extended or short address for a child.
+     * Sets whether to use the extended or short address for a neighbor.
      *
-     * @param[in] aChild            A reference to the child.
+     * @param[in] aNeighbor         A reference to the neighbor.
      * @param[in] aUseShortAddress  `true` to use short address, `false` to use extended address.
      */
-    void SetChildUseShortAddress(Child &aChild, bool aUseShortAddress);
+    void SetNeighborUseShortAddress(IndirectNeighbor &aNeighbor, bool aUseShortAddress);
 
     /**
      * Handles a child mode change and updates any queued messages for the child accordingly.
@@ -249,14 +250,14 @@ public:
 
 private:
     // Callbacks from DataPollHandler
-    Error PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, Child &aChild);
-    void  HandleSentFrameToChild(const Mac::TxFrame &aFrame, const FrameContext &aContext, Error aError, Child &aChild);
-    void  HandleFrameChangeDone(Child &aChild);
+    Error PrepareFrameForNeighbor(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectNeighbor &aNeighbor);
+    void  HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame, const FrameContext &aContext, Error aError, IndirectNeighbor &aNeighbor);
+    void  HandleFrameChangeDone(IndirectNeighbor &aNeighbor);
 
-    void     UpdateIndirectMessage(Child &aChild);
-    void     RequestMessageUpdate(Child &aChild);
-    uint16_t PrepareDataFrame(Mac::TxFrame &aFrame, Child &aChild, Message &aMessage);
-    void     PrepareEmptyFrame(Mac::TxFrame &aFrame, Child &aChild, bool aAckRequest);
+    void     UpdateIndirectMessage(IndirectNeighbor &aNeighbor);
+    void     RequestMessageUpdate(IndirectNeighbor &aNeighbor);
+    uint16_t PrepareDataFrame(Mac::TxFrame &aFrame, IndirectNeighbor &aNeighbor, Message &aMessage);
+    void     PrepareEmptyFrame(Mac::TxFrame &aFrame, IndirectNeighbor &aNeighbor, bool aAckRequest);
     void     ClearMessagesForRemovedChildren(void);
 
     static bool AcceptAnyMessage(const Message &aMessage);

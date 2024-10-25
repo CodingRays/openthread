@@ -52,7 +52,7 @@ namespace ot {
  * @{
  */
 
-class Child;
+class IndirectNeighbor;
 
 /**
  * Implements CSL tx scheduling functionality.
@@ -66,11 +66,11 @@ public:
     static constexpr uint8_t kMaxCslTriggeredTxAttempts = OPENTHREAD_CONFIG_MAC_MAX_TX_ATTEMPTS_INDIRECT_POLLS;
 
     /**
-     * Defines all the child info required for scheduling CSL transmissions.
+     * Defines all the neighbor info required for scheduling CSL transmissions.
      *
-     * `Child` class publicly inherits from this class.
+     * `IndirectNeighbor` class publicly inherits from this class.
      */
-    class ChildInfo
+    class NeighborInfo
     {
     public:
         uint8_t GetCslTxAttempts(void) const { return mCslTxAttempts; }
@@ -100,7 +100,7 @@ public:
 
     private:
         uint8_t  mCslTxAttempts : 7;   ///< Number of CSL triggered tx attempts.
-        bool     mCslSynchronized : 1; ///< Indicates whether or not the child is CSL synchronized.
+        bool     mCslSynchronized : 1; ///< Indicates whether or not the neighbor is CSL synchronized.
         uint8_t  mCslChannel;          ///< The channel the device will listen on.
         uint32_t mCslTimeout;          ///< The sync timeout, in seconds.
         uint16_t mCslPeriod; ///< CSL sampled listening period between consecutive channel samples in units of 10
@@ -178,15 +178,15 @@ public:
          *
          * @param[out] aFrame    A reference to a MAC frame where the new frame would be placed.
          * @param[out] aContext  A reference to a `FrameContext` where the context for the new frame would be placed.
-         * @param[in]  aChild    The child for which to prepare the frame.
+         * @param[in]  aNeighbor The neighbor for which to prepare the frame.
          *
          * @retval kErrorNone   Frame was prepared successfully.
-         * @retval kErrorAbort  CSL transmission should be aborted (no frame for the child).
+         * @retval kErrorAbort  CSL transmission should be aborted (no frame for the neighbor).
          */
-        Error PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, Child &aChild);
+        Error PrepareFrameForNeighbor(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectNeighbor &aNeighbor);
 
         /**
-         * This callback method notifies the end of CSL frame transmission to a child.
+         * This callback method notifies the end of CSL frame transmission to a neighbor.
          *
          * @param[in]  aFrame     The transmitted frame.
          * @param[in]  aContext   The context associated with the frame when it was prepared.
@@ -194,12 +194,12 @@ public:
          *                        kErrorNoAck when the frame was transmitted but no ACK was received,
          *                        kErrorChannelAccessFailure tx failed due to activity on the channel,
          *                        kErrorAbort when transmission was aborted for other reasons.
-         * @param[in]  aChild     The child to which the frame was transmitted.
+         * @param[in]  aNeighbor  The neighbor to which the frame was transmitted.
          */
-        void HandleSentFrameToChild(const Mac::TxFrame &aFrame,
-                                    const FrameContext &aContext,
-                                    Error               aError,
-                                    Child              &aChild);
+        void HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
+                                       const FrameContext &aContext,
+                                       Error               aError,
+                                       IndirectNeighbor   &aNeighbor);
     };
     /**
      * Initializes the CSL tx scheduler object.
@@ -209,16 +209,16 @@ public:
     explicit CslTxScheduler(Instance &aInstance);
 
     /**
-     * Updates the next CSL transmission (finds the nearest child).
+     * Updates the next CSL transmission (finds the nearest neighbor).
      *
      * It would then request the `Mac` to do the CSL tx. If the last CSL tx has been fired at `Mac` but hasn't been
-     * done yet, and it's aborted, this method would set `mCslTxChild` to `nullptr` to notify the `HandleTransmitDone`
+     * done yet, and it's aborted, this method would set `mCslTxNeighbor` to `nullptr` to notify the `HandleTransmitDone`
      * that the operation has been aborted.
      */
     void Update(void);
 
     /**
-     * Clears all the states inside `CslTxScheduler` and the related states in each child.
+     * Clears all the states inside `CslTxScheduler` and the related states in each neighbor.
      */
     void Clear(void);
 
@@ -234,16 +234,16 @@ private:
 
     void RescheduleCslTx(void);
 
-    uint32_t GetNextCslTransmissionDelay(const Child &aChild, uint32_t &aDelayFromLastRx, uint32_t aAheadUs) const;
+    uint32_t GetNextCslTransmissionDelay(const IndirectNeighbor &aNeighbor, uint32_t &aDelayFromLastRx, uint32_t aAheadUs) const;
 
     // Callbacks from `Mac`
     Mac::TxFrame *HandleFrameRequest(Mac::TxFrames &aTxFrames);
     void          HandleSentFrame(const Mac::TxFrame &aFrame, Error aError);
 
-    void HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, Child &aChild);
+    void HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, IndirectNeighbor &aNeighbor);
 
     uint32_t                mCslFrameRequestAheadUs;
-    Child                  *mCslTxChild;
+    IndirectNeighbor       *mCslTxNeighbor;
     Message                *mCslTxMessage;
     Callbacks::FrameContext mFrameContext;
     Callbacks               mCallbacks;

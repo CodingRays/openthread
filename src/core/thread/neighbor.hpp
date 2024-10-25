@@ -772,6 +772,56 @@ private:
 
 DefineCoreType(otNeighborInfo, Neighbor::Info);
 
+#if OPENTHREAD_FTD
+/**
+ * Represents a neighbor that may be reachable over an indirect link.
+ */
+class IndirectNeighbor : public Neighbor,
+                         public IndirectSender::NeighborInfo,
+                         public DataPollHandler::NeighborInfo
+#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+    ,
+                         public CslTxScheduler::NeighborInfo
+#endif
+{
+public:
+    /**
+     * Returns the supervision interval (in seconds).
+     *
+     * @returns The supervision interval (in seconds).
+     */
+    uint16_t GetSupervisionInterval(void) const { return mSupervisionInterval; }
+
+    /**
+     * Sets the supervision interval.
+     *
+     * @param[in] aInterval  The supervision interval (in seconds).
+     */
+    void SetSupervisionInterval(uint16_t aInterval) { mSupervisionInterval = aInterval; }
+
+    /**
+     * Increments the number of seconds since last supervision of the child.
+     */
+    void IncrementSecondsSinceLastSupervision(void) { mSecondsSinceSupervision++; }
+
+    /**
+     * Returns the number of seconds since last supervision of the child (last message to the child)
+     *
+     * @returns Number of seconds since last supervision of the child.
+     */
+    uint16_t GetSecondsSinceLastSupervision(void) const { return mSecondsSinceSupervision; }
+
+    /**
+     * Resets the number of seconds since last supervision of the child to zero.
+     */
+    void ResetSecondsSinceLastSupervision(void) { mSecondsSinceSupervision = 0; }
+
+private:
+    uint16_t mSupervisionInterval;
+    uint16_t mSecondsSinceSupervision;
+};
+#endif // OPENTHREAD_FTD
+
 } // namespace ot
 
 #endif // NEIGHBOR_HPP_

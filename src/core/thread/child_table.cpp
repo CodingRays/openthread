@@ -246,7 +246,7 @@ void ChildTable::Restore(void)
         child->GenerateChallenge();
         child->SetLastHeard(TimerMilli::GetNow());
         child->SetVersion(childInfo.GetVersion());
-        Get<IndirectSender>().SetChildUseShortAddress(*child, true);
+        Get<IndirectSender>().SetNeighborUseShortAddress(*child, true);
         Get<NeighborTable>().Signal(NeighborTable::kChildAdded, *child);
         numChildren++;
     }

@@ -46,31 +46,31 @@ DataPollHandler::Callbacks::Callbacks(Instance &aInstance)
 {
 }
 
-inline Error DataPollHandler::Callbacks::PrepareFrameForChild(Mac::TxFrame &aFrame,
-                                                              FrameContext &aContext,
-                                                              Child        &aChild)
+inline Error DataPollHandler::Callbacks::PrepareFrameForNeighbor(Mac::TxFrame     &aFrame,
+                                                                 FrameContext     &aContext,
+                                                                 IndirectNeighbor &aNeighbor)
 {
-    return Get<IndirectSender>().PrepareFrameForChild(aFrame, aContext, aChild);
+    return Get<IndirectSender>().PrepareFrameForNeighbor(aFrame, aContext, aNeighbor);
 }
 
-inline void DataPollHandler::Callbacks::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
-                                                               const FrameContext &aContext,
-                                                               Error               aError,
-                                                               Child              &aChild)
+inline void DataPollHandler::Callbacks::HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
+                                                                  const FrameContext &aContext,
+                                                                  Error               aError,
+                                                                  IndirectNeighbor   &aNeighbor)
 {
-    Get<IndirectSender>().HandleSentFrameToChild(aFrame, aContext, aError, aChild);
+    Get<IndirectSender>().HandleSentFrameToNeighbor(aFrame, aContext, aError, aNeighbor);
 }
 
-inline void DataPollHandler::Callbacks::HandleFrameChangeDone(Child &aChild)
+inline void DataPollHandler::Callbacks::HandleFrameChangeDone(IndirectNeighbor &aNeighbor)
 {
-    Get<IndirectSender>().HandleFrameChangeDone(aChild);
+    Get<IndirectSender>().HandleFrameChangeDone(aNeighbor);
 }
 
 //---------------------------------------------------------
 
 DataPollHandler::DataPollHandler(Instance &aInstance)
     : InstanceLocator(aInstance)
-    , mIndirectTxChild(nullptr)
+    , mIndirectTxNeighbor(nullptr)
     , mFrameContext()
     , mCallbacks(aInstance)
 {
@@ -86,12 +86,12 @@ void DataPollHandler::Clear(void)
         child.ResetIndirectTxAttempts();
     }
 
-    mIndirectTxChild = nullptr;
+    mIndirectTxNeighbor = nullptr;
 }
 
-void DataPollHandler::HandleNewFrame(Child &aChild)
+void DataPollHandler::HandleNewFrame(IndirectNeighbor &aNeighbor)
 {
-    OT_UNUSED_VARIABLE(aChild);
+    OT_UNUSED_VARIABLE(aNeighbor);
 
     // There is no need to take any action with current data poll
     // handler implementation, since the preparation of the frame
@@ -101,25 +101,25 @@ void DataPollHandler::HandleNewFrame(Child &aChild)
     // delegated to RCP).
 }
 
-void DataPollHandler::RequestFrameChange(FrameChange aChange, Child &aChild)
+void DataPollHandler::RequestFrameChange(FrameChange aChange, IndirectNeighbor &aNeighbor)
 {
-    if ((mIndirectTxChild == &aChild) && Get<Mac::Mac>().IsPerformingIndirectTransmit())
+    if ((mIndirectTxNeighbor == &aNeighbor) && Get<Mac::Mac>().IsPerformingIndirectTransmit())
     {
         switch (aChange)
         {
         case kReplaceFrame:
-            aChild.SetFrameReplacePending(true);
+            aNeighbor.SetFrameReplacePending(true);
             break;
 
         case kPurgeFrame:
-            aChild.SetFramePurgePending(true);
+            aNeighbor.SetFramePurgePending(true);
             break;
         }
     }
     else
     {
-        ResetTxAttempts(aChild);
-        mCallbacks.HandleFrameChangeDone(aChild);
+        ResetTxAttempts(aNeighbor);
+        mCallbacks.HandleFrameChangeDone(aNeighbor);
     }
 }
 
@@ -157,9 +157,9 @@ void DataPollHandler::HandleDataPoll(Mac::RxFrame &aFrame)
         ExitNow();
     }
 
-    if (mIndirectTxChild == nullptr)
+    if (mIndirectTxNeighbor == nullptr)
     {
-        mIndirectTxChild = child;
+        mIndirectTxNeighbor = child;
         Get<Mac::Mac>().RequestIndirectFrameTransmission();
     }
     else
@@ -175,21 +175,21 @@ Mac::TxFrame *DataPollHandler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
 {
     Mac::TxFrame *frame = nullptr;
 
-    VerifyOrExit(mIndirectTxChild != nullptr);
+    VerifyOrExit(mIndirectTxNeighbor != nullptr);
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
-    frame = &aTxFrames.GetTxFrame(mIndirectTxChild->GetLastPollRadioType());
+    frame = &aTxFrames.GetTxFrame(mIndirectTxNeighbor->GetLastPollRadioType());
 #else
     frame = &aTxFrames.GetTxFrame();
 #endif
 
-    VerifyOrExit(mCallbacks.PrepareFrameForChild(*frame, mFrameContext, *mIndirectTxChild) == kErrorNone,
+    VerifyOrExit(mCallbacks.PrepareFrameForNeighbor(*frame, mFrameContext, *mIndirectTxNeighbor) == kErrorNone,
                  frame = nullptr);
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-    if ((mIndirectTxChild->GetIndirectTxAttempts() > 0) || (mIndirectTxChild->GetCslTxAttempts() > 0))
+    if ((mIndirectTxNeighbor->GetIndirectTxAttempts() > 0) || (mIndirectTxNeighbor->GetCslTxAttempts() > 0))
 #else
-    if (mIndirectTxChild->GetIndirectTxAttempts() > 0)
+    if (mIndirectTxNeighbor->GetIndirectTxAttempts() > 0)
 #endif
     {
         // For a re-transmission of an indirect frame to a sleepy
@@ -197,12 +197,12 @@ Mac::TxFrame *DataPollHandler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
         // data sequence number as the previous attempt.
 
         frame->SetIsARetransmission(true);
-        frame->SetSequence(mIndirectTxChild->GetIndirectDataSequenceNumber());
+        frame->SetSequence(mIndirectTxNeighbor->GetIndirectDataSequenceNumber());
 
         if (frame->GetSecurityEnabled())
         {
-            frame->SetFrameCounter(mIndirectTxChild->GetIndirectFrameCounter());
-            frame->SetKeyId(mIndirectTxChild->GetIndirectKeyId());
+            frame->SetFrameCounter(mIndirectTxNeighbor->GetIndirectFrameCounter());
+            frame->SetKeyId(mIndirectTxNeighbor->GetIndirectKeyId());
         }
     }
     else
@@ -216,40 +216,40 @@ exit:
 
 void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError)
 {
-    Child *child = mIndirectTxChild;
+    IndirectNeighbor *neighbor = mIndirectTxNeighbor;
 
-    VerifyOrExit(child != nullptr);
+    VerifyOrExit(neighbor != nullptr);
 
-    mIndirectTxChild = nullptr;
-    HandleSentFrame(aFrame, aError, *child);
+    mIndirectTxNeighbor = nullptr;
+    HandleSentFrame(aFrame, aError, *neighbor);
 
 exit:
     ProcessPendingPolls();
 }
 
-void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, Child &aChild)
+void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, IndirectNeighbor &aNeighbor)
 {
-    if (aChild.IsFramePurgePending())
+    if (aNeighbor.IsFramePurgePending())
     {
-        aChild.SetFramePurgePending(false);
-        aChild.SetFrameReplacePending(false);
-        ResetTxAttempts(aChild);
-        mCallbacks.HandleFrameChangeDone(aChild);
+        aNeighbor.SetFramePurgePending(false);
+        aNeighbor.SetFrameReplacePending(false);
+        ResetTxAttempts(aNeighbor);
+        mCallbacks.HandleFrameChangeDone(aNeighbor);
         ExitNow();
     }
 
     switch (aError)
     {
     case kErrorNone:
-        ResetTxAttempts(aChild);
-        aChild.SetFrameReplacePending(false);
+        ResetTxAttempts(aNeighbor);
+        aNeighbor.SetFrameReplacePending(false);
         break;
 
     case kErrorNoAck:
         OT_ASSERT(!aFrame.GetSecurityEnabled() || aFrame.IsHeaderUpdated());
 
-        aChild.IncrementIndirectTxAttempts();
-        LogInfo("Indirect tx to child %04x failed, attempt %d/%d", aChild.GetRloc16(), aChild.GetIndirectTxAttempts(),
+        aNeighbor.IncrementIndirectTxAttempts();
+        LogInfo("Indirect tx to child %04x failed, attempt %d/%d", aNeighbor.GetRloc16(), aChild.GetIndirectTxAttempts(),
                 kMaxPollTriggeredTxAttempts);
 
         OT_FALL_THROUGH;
@@ -257,21 +257,21 @@ void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, 
     case kErrorChannelAccessFailure:
     case kErrorAbort:
 
-        if (aChild.IsFrameReplacePending())
+        if (aNeighbor.IsFrameReplacePending())
         {
-            aChild.SetFrameReplacePending(false);
-            ResetTxAttempts(aChild);
-            mCallbacks.HandleFrameChangeDone(aChild);
+            aNeighbor.SetFrameReplacePending(false);
+            ResetTxAttempts(aNeighbor);
+            mCallbacks.HandleFrameChangeDone(aNeighbor);
             ExitNow();
         }
 
-        if ((aChild.GetIndirectTxAttempts() < kMaxPollTriggeredTxAttempts) && !aFrame.IsEmpty())
+        if ((aNeighbor.GetIndirectTxAttempts() < kMaxPollTriggeredTxAttempts) && !aFrame.IsEmpty())
         {
             // We save the frame counter, key id, and data sequence number of
             // current frame so we use the same values for the retransmission
             // of the frame following the receipt of the next data poll.
 
-            aChild.SetIndirectDataSequenceNumber(aFrame.GetSequence());
+            aNeighbor.SetIndirectDataSequenceNumber(aFrame.GetSequence());
 
             if (aFrame.GetSecurityEnabled() && aFrame.IsHeaderUpdated())
             {
@@ -279,23 +279,23 @@ void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, 
                 uint8_t  keyId;
 
                 SuccessOrAssert(aFrame.GetFrameCounter(frameCounter));
-                aChild.SetIndirectFrameCounter(frameCounter);
+                aNeighbor.SetIndirectFrameCounter(frameCounter);
 
                 SuccessOrAssert(aFrame.GetKeyId(keyId));
-                aChild.SetIndirectKeyId(keyId);
+                aNeighbor.SetIndirectKeyId(keyId);
             }
 
             ExitNow();
         }
 
-        aChild.ResetIndirectTxAttempts();
+        aNeighbor.ResetIndirectTxAttempts();
         break;
 
     default:
         OT_ASSERT(false);
     }
 
-    mCallbacks.HandleSentFrameToChild(aFrame, mFrameContext, aError, aChild);
+    mCallbacks.HandleSentFrameToNeighbor(aFrame, mFrameContext, aError, aNeighbor);
 
 exit:
     return;
@@ -312,25 +312,25 @@ void DataPollHandler::ProcessPendingPolls(void)
 
         // Find the child with earliest poll receive time.
 
-        if ((mIndirectTxChild == nullptr) || (child.GetLastHeard() < mIndirectTxChild->GetLastHeard()))
+        if ((mIndirectTxNeighbor == nullptr) || (child.GetLastHeard() < mIndirectTxNeighbor->GetLastHeard()))
         {
-            mIndirectTxChild = &child;
+            mIndirectTxNeighbor = &child;
         }
     }
 
-    if (mIndirectTxChild != nullptr)
+    if (mIndirectTxNeighbor != nullptr)
     {
-        mIndirectTxChild->SetDataPollPending(false);
+        mIndirectTxNeighbor->SetDataPollPending(false);
         Get<Mac::Mac>().RequestIndirectFrameTransmission();
     }
 }
 
-void DataPollHandler::ResetTxAttempts(Child &aChild)
+void DataPollHandler::ResetTxAttempts(IndirectNeighbor &aNeighbor)
 {
-    aChild.ResetIndirectTxAttempts();
+    aNeighbor.ResetIndirectTxAttempts();
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-    aChild.ResetCslTxAttempts();
+    aNeighbor.ResetCslTxAttempts();
 #endif
 }
 

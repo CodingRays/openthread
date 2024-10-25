@@ -57,7 +57,7 @@ namespace ot {
  * @{
  */
 
-class Child;
+class IndirectNeighbor;
 
 /**
  * Implements the data poll (mac data request command) handler.
@@ -83,7 +83,7 @@ public:
      *
      * `Child` class publicly inherits from this class.
      */
-    class ChildInfo
+    class NeighborInfo
     {
         friend class DataPollHandler;
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
@@ -167,7 +167,7 @@ public:
          * @retval kErrorNone   Frame was prepared successfully.
          * @retval kErrorAbort  Indirect transmission to child should be aborted (no frame for the child).
          */
-        Error PrepareFrameForChild(Mac::TxFrame &aFrame, FrameContext &aContext, Child &aChild);
+        Error PrepareFrameForNeighbor(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectNeighbor &aNeighbor);
 
         /**
          * This callback method notifies the end of indirect frame transmission to a child.
@@ -178,12 +178,12 @@ public:
          *                        kErrorNoAck when the frame was transmitted but no ACK was received,
          *                        kErrorChannelAccessFailure tx failed due to activity on the channel,
          *                        kErrorAbort when transmission was aborted for other reasons.
-         * @param[in]  aChild     The child to which the frame was transmitted.
+         * @param[in]  aNeighbor  The neighbor to which the frame was transmitted.
          */
-        void HandleSentFrameToChild(const Mac::TxFrame &aFrame,
-                                    const FrameContext &aContext,
-                                    Error               aError,
-                                    Child              &aChild);
+        void HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
+                                       const FrameContext &aContext,
+                                       Error               aError,
+                                       IndirectNeighbor   &aNeighbor);
 
         /**
          * This callback method notifies that a requested frame change from `RequestFrameChange()` is processed.
@@ -191,9 +191,9 @@ public:
          * This callback indicates to the next layer that the indirect frame/message for the child can be safely
          * updated.
          *
-         * @param[in]  aChild     The child to update.
+         * @param[in]  aNeighbor  The neighbor to update.
          */
-        void HandleFrameChangeDone(Child &aChild);
+        void HandleFrameChangeDone(IndirectNeighbor &aNeighbor);
     };
 
     /**
@@ -219,7 +219,7 @@ public:
      *
      * @param[in]  aChild     The child which has a new frame.
      */
-    void HandleNewFrame(Child &aChild);
+    void HandleNewFrame(IndirectNeighbor &aNeighbor);
 
     /**
      * Requests a frame change for a given child.
@@ -252,7 +252,7 @@ public:
      * @param[in]  aChange    The frame change type.
      * @param[in]  aChild     The child to process its frame change.
      */
-    void RequestFrameChange(FrameChange aChange, Child &aChild);
+    void RequestFrameChange(FrameChange aChange, IndirectNeighbor &aNeighbor);
 
 private:
     // Callbacks from MAC
@@ -260,9 +260,9 @@ private:
     Mac::TxFrame *HandleFrameRequest(Mac::TxFrames &aTxFrames);
     void          HandleSentFrame(const Mac::TxFrame &aFrame, Error aError);
 
-    void HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, Child &aChild);
+    void HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, IndirectNeighbor &aNeighbor);
     void ProcessPendingPolls(void);
-    void ResetTxAttempts(Child &aChild);
+    void ResetTxAttempts(IndirectNeighbor &aNeighbor);
 
     // In the current implementation of `DataPollHandler`, we can have a
     // single indirect tx operation active at MAC layer at each point of
@@ -270,7 +270,7 @@ private:
     // indicates no active indirect tx). `mFrameContext` tracks the
     // context for the prepared frame for the current indirect tx.
 
-    Child                  *mIndirectTxChild;
+    IndirectNeighbor       *mIndirectTxNeighbor;
     Callbacks::FrameContext mFrameContext;
     Callbacks               mCallbacks;
 };

@@ -44,7 +44,7 @@
 
 namespace ot {
 
-class Child;
+class IndirectNeighbor;
 
 /**
  * @addtogroup core-source-match-controller
@@ -87,32 +87,32 @@ public:
     /**
      * Increments the message count for a child and updates the source match table.
      *
-     * @param[in] aChild    A reference to the child.
+     * @param[in] aNeighbor    A reference to the child.
      */
-    void IncrementMessageCount(Child &aChild);
+    void IncrementMessageCount(IndirectNeighbor &aNeighbor);
 
     /**
      * Decrements the message count for a child and updates the source match table.
      *
-     * @param[in] aChild    A reference to the child.
+     * @param[in] aNeighbor    A reference to the child.
      */
-    void DecrementMessageCount(Child &aChild);
+    void DecrementMessageCount(IndirectNeighbor &aNeighbor);
 
     /**
      * Resets the message count for a child to zero and updates the source match table.
      *
-     * @param[in] aChild    A reference to the child.
+     * @param[in] aNeighbor    A reference to the child.
      */
-    void ResetMessageCount(Child &aChild);
+    void ResetMessageCount(IndirectNeighbor &aNeighbor);
 
     /**
      * Sets whether or not to perform source address matching on the extended or short address for
      * a child.
      *
-     * @param[in] aChild            A reference to the child.
+     * @param[in] aNeighbor            A reference to the child.
      * @param[in] aUseShortAddress  `true` to match on short source address, `false` otherwise.
      */
-    void SetSrcMatchAsShort(Child &aChild, bool aUseShortAddress);
+    void SetSrcMatchAsShort(IndirectNeighbor &aNeighbor, bool aUseShortAddress);
 
 private:
     /**
@@ -139,9 +139,9 @@ private:
      * that there are no remaining pending entries. If the entry cannot be added (no space in source match table),
      * the child is marked to remember the pending entry and source matching is disabled.
      *
-     * @param[in] aChild    A reference to the child.
+     * @param[in] aNeighbor    A reference to the child.
      */
-    void AddEntry(Child &aChild);
+    void AddEntry(IndirectNeighbor &aNeighbor);
 
     /**
      * Clears an entry in source match table for a given child and updates the state of source matching
@@ -150,20 +150,20 @@ private:
      * If the entry is removed successfully and frees up space in the source match table, any remaining pending
      * entries are added. If all pending entries are successfully added, source matching is enabled.
      *
-     * @param[in] aChild    A reference to the child.
+     * @param[in] aNeighbor    A reference to the child.
      */
-    void ClearEntry(Child &aChild);
+    void ClearEntry(IndirectNeighbor &aNeighbor);
 
     /**
      * Adds a given child's address (short or extended address depending on child's setting) to the source
      * source match table (@sa SetSrcMatchAsShort.
      *
-     * @param[in] aChild            A reference to the child
+     * @param[in] aNeighbor            A reference to the child
      *
      * @retval kErrorNone     Child's address was added successfully to the source match table.
      * @retval kErrorNoBufs   No available space in the source match table.
      */
-    Error AddAddress(const Child &aChild);
+    Error AddAddress(const IndirectNeighbor &aNeighbor);
 
     /**
      * Adds all pending entries to the source match table.
