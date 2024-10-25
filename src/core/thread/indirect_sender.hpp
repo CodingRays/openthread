@@ -213,7 +213,8 @@ public:
      *
      * @returns A pointer to the matching queued message, or `nullptr` if none is found.
      */
-    const Message *FindQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor, MessageChecker aChecker) const;
+    const Message *FindQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor,
+                                                        MessageChecker          aChecker) const;
 
     /**
      * Indicates whether there is any queued message for a given neighbor that also satisfies the conditions of a
@@ -251,7 +252,10 @@ public:
 private:
     // Callbacks from DataPollHandler
     Error PrepareFrameForNeighbor(Mac::TxFrame &aFrame, FrameContext &aContext, IndirectNeighbor &aNeighbor);
-    void  HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame, const FrameContext &aContext, Error aError, IndirectNeighbor &aNeighbor);
+    void  HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
+                                    const FrameContext &aContext,
+                                    Error               aError,
+                                    IndirectNeighbor   &aNeighbor);
     void  HandleFrameChangeDone(IndirectNeighbor &aNeighbor);
 
     void     UpdateIndirectMessage(IndirectNeighbor &aNeighbor);

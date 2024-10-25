@@ -162,7 +162,7 @@ public:
      *
      * @returns A pointer to the `IndirectNeighbor` corresponding to @p aMacAddress, `nullptr` otherwise.
      */
-    IndirectNeighbor *FindIndirectNeighbor(const Mac::Address &aMacAddress,
+    IndirectNeighbor *FindIndirectNeighbor(const Mac::Address   &aMacAddress,
                                            Neighbor::StateFilter aFilter = Neighbor::kInStateValidOrRestoring);
 
     /**

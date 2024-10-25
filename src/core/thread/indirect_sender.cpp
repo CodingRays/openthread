@@ -89,7 +89,7 @@ void IndirectSender::AddIndirectMessageForNeighbor(Message &aMessage, IndirectNe
 
     if (Get<ChildTable>().IsChild(aNeighbor))
     {
-        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child&>(aNeighbor));
+        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child &>(aNeighbor));
 
         VerifyOrExit(!aMessage.GetIndirectTxChildMask().Has(childIndex));
         aMessage.GetIndirectTxChildMask().Add(childIndex);
@@ -120,11 +120,11 @@ exit:
 
 Error IndirectSender::RemoveIndirectMessageFromNeighbor(Message &aMessage, IndirectNeighbor &aNeighbor)
 {
-    Error    error      = kErrorNone;
+    Error error = kErrorNone;
 
     if (Get<ChildTable>().IsChild(aNeighbor))
     {
-        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child&>(aNeighbor));
+        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child &>(aNeighbor));
 
         VerifyOrExit(aMessage.GetIndirectTxChildMask().Has(childIndex), error = kErrorNotFound);
         aMessage.GetIndirectTxChildMask().Remove(childIndex);
@@ -148,7 +148,7 @@ void IndirectSender::ClearAllIndirectMessagesForNeighbor(IndirectNeighbor &aNeig
 
     if (Get<ChildTable>().IsChild(aNeighbor))
     {
-        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child&>(aNeighbor));
+        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child &>(aNeighbor));
 
         for (Message &message : Get<MeshForwarder>().mSendQueue)
         {
@@ -174,13 +174,14 @@ exit:
     return;
 }
 
-const Message *IndirectSender::FindQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor, MessageChecker aChecker) const
+const Message *IndirectSender::FindQueuedIndirectMessageForNeighbor(const IndirectNeighbor &aNeighbor,
+                                                                    MessageChecker          aChecker) const
 {
-    const Message *match      = nullptr;
+    const Message *match = nullptr;
 
     if (Get<ChildTable>().IsChild(aNeighbor))
     {
-        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<const Child&>(aNeighbor));
+        uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<const Child &>(aNeighbor));
 
         for (const Message &message : Get<MeshForwarder>().mSendQueue)
         {
@@ -264,7 +265,8 @@ void IndirectSender::RequestMessageUpdate(IndirectNeighbor &aNeighbor)
 
         if (Get<ChildTable>().IsChild(aNeighbor))
         {
-            purge = !curMessage->GetIndirectTxChildMask().Has(Get<ChildTable>().GetChildIndex(static_cast<Child&>(aNeighbor)));
+            purge = !curMessage->GetIndirectTxChildMask().Has(
+                Get<ChildTable>().GetChildIndex(static_cast<Child &>(aNeighbor)));
         }
         else
         {
@@ -457,7 +459,7 @@ void IndirectSender::HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
 
     if (aError == kErrorNone && Get<ChildTable>().IsChild(aNeighbor))
     {
-        Get<ChildSupervisor>().UpdateOnSend(static_cast<Child&>(aNeighbor));
+        Get<ChildSupervisor>().UpdateOnSend(static_cast<Child &>(aNeighbor));
     }
 
     // A zero `nextOffset` indicates that the sent frame is an empty
@@ -515,7 +517,7 @@ void IndirectSender::HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
     {
         // The indirect tx of this message to the child is done.
 
-        Error        txError    = aError;
+        Error        txError = aError;
         Mac::Address macDest;
 
         aNeighbor.SetIndirectMessage(nullptr);
@@ -568,7 +570,7 @@ void IndirectSender::HandleSentFrameToNeighbor(const Mac::TxFrame &aFrame,
 
         if (Get<ChildTable>().IsChild(aNeighbor))
         {
-            uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child&>(aNeighbor));
+            uint16_t childIndex = Get<ChildTable>().GetChildIndex(static_cast<Child &>(aNeighbor));
 
             if (message->GetIndirectTxChildMask().Has(childIndex))
             {

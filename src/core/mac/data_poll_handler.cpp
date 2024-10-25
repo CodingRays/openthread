@@ -249,8 +249,8 @@ void DataPollHandler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, 
         OT_ASSERT(!aFrame.GetSecurityEnabled() || aFrame.IsHeaderUpdated());
 
         aNeighbor.IncrementIndirectTxAttempts();
-        LogInfo("Indirect tx to child %04x failed, attempt %d/%d", aNeighbor.GetRloc16(), aChild.GetIndirectTxAttempts(),
-                kMaxPollTriggeredTxAttempts);
+        LogInfo("Indirect tx to child %04x failed, attempt %d/%d", aNeighbor.GetRloc16(),
+                aChild.GetIndirectTxAttempts(), kMaxPollTriggeredTxAttempts);
 
         OT_FALL_THROUGH;
 

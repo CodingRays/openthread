@@ -118,9 +118,9 @@ public:
     uint16_t GetChildIndex(const Child &aChild) const { return static_cast<uint16_t>(&aChild - mChildren); }
 
     bool IsChild(const IndirectNeighbor &aNeighbor) const
-    { 
+    {
         OT_UNUSED_VARIABLE(aNeighbor);
-        return true; 
+        return true;
     }
 
     /**

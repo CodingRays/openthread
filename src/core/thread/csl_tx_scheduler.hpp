@@ -212,8 +212,8 @@ public:
      * Updates the next CSL transmission (finds the nearest neighbor).
      *
      * It would then request the `Mac` to do the CSL tx. If the last CSL tx has been fired at `Mac` but hasn't been
-     * done yet, and it's aborted, this method would set `mCslTxNeighbor` to `nullptr` to notify the `HandleTransmitDone`
-     * that the operation has been aborted.
+     * done yet, and it's aborted, this method would set `mCslTxNeighbor` to `nullptr` to notify the
+     * `HandleTransmitDone` that the operation has been aborted.
      */
     void Update(void);
 
@@ -234,7 +234,9 @@ private:
 
     void RescheduleCslTx(void);
 
-    uint32_t GetNextCslTransmissionDelay(const IndirectNeighbor &aNeighbor, uint32_t &aDelayFromLastRx, uint32_t aAheadUs) const;
+    uint32_t GetNextCslTransmissionDelay(const IndirectNeighbor &aNeighbor,
+                                         uint32_t               &aDelayFromLastRx,
+                                         uint32_t                aAheadUs) const;
 
     // Callbacks from `Mac`
     Mac::TxFrame *HandleFrameRequest(Mac::TxFrames &aTxFrames);

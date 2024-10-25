@@ -92,7 +92,7 @@ void CslTxScheduler::Update(void)
         // `Mac` has already started the CSL tx, so wait for tx done callback
         // to call `RescheduleCslTx`
         mCslTxNeighbor->ResetCslTxAttempts();
-        mCslTxNeighbor                      = nullptr;
+        mCslTxNeighbor                   = nullptr;
         mFrameContext.mMessageNextOffset = 0;
     }
 }
@@ -122,8 +122,8 @@ void CslTxScheduler::Clear(void)
  */
 void CslTxScheduler::RescheduleCslTx(void)
 {
-    uint32_t            minDelayTime = Time::kMaxDuration;
-    IndirectNeighbor   *bestNeighbor = nullptr;
+    uint32_t          minDelayTime = Time::kMaxDuration;
+    IndirectNeighbor *bestNeighbor = nullptr;
 
     for (IndirectNeighbor &neighbor : Get<ChildTable>().Iterate(Child::kInStateAnyExceptInvalid))
     {
@@ -190,7 +190,8 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
     frame = &aTxFrames.GetTxFrame();
 #endif
 
-    VerifyOrExit(mCallbacks.PrepareFrameForNeighbor(*frame, mFrameContext, *mCslTxNeighbor) == kErrorNone, frame = nullptr);
+    VerifyOrExit(mCallbacks.PrepareFrameForNeighbor(*frame, mFrameContext, *mCslTxNeighbor) == kErrorNone,
+                 frame = nullptr);
     mCslTxMessage = mCslTxNeighbor->GetIndirectMessage();
     VerifyOrExit(mCslTxMessage != nullptr, frame = nullptr);
 
@@ -215,7 +216,7 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
     }
 
     frame->SetChannel(mCslTxNeighbor->GetCslChannel() == 0 ? Get<Mac::Mac>().GetPanChannel()
-                                                        : mCslTxNeighbor->GetCslChannel());
+                                                           : mCslTxNeighbor->GetCslChannel());
 
     if (frame->GetChannel() != Get<Mac::Mac>().GetPanChannel())
     {
